@@ -5,7 +5,7 @@ import fs from 'fs';
 
 let prisma: PrismaClient;
 
-let dbPath = path.join(process.cwd(), 'prisma/dev.db');
+let dbPath = path.join(process.cwd(), 'prisma/seed.db');
 
 // On Vercel serverless functions, the root directory is read-only.
 // We must copy dev.db to /tmp/dev.db so SQLite write transactions succeed cleanly.
