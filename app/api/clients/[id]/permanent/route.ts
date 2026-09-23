@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireSession } from '@/lib/auth';
 import fs from 'fs';
 import path from 'path';
 
@@ -8,6 +9,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSession(['advisor']);
+    if ('response' in auth) return auth.response;
+
     const { id } = await params;
 
     const client = await prisma.client.findUnique({

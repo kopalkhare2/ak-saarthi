@@ -1,33 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/app-context';
 import Badge, { policyStatusBadge } from '@/components/ui/badge';
 import { formatCurrency, formatDate, policyTypeLabels } from '@/lib/utils';
 import { Shield } from 'lucide-react';
 
 export default function ClientPoliciesPage() {
+  // Already scoped to the signed-in client by the API.
   const { policies } = useApp();
-  const [clientId, setClientId] = useState<string>('client-001');
-
-  useEffect(() => {
-    const id = localStorage.getItem('ak_logged_in_client_id');
-    if (id) {
-      setClientId(id);
-    }
-  }, []);
-
-  const myPolicies = policies.filter((p) => p.clientId === clientId);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">My Policies</h1>
-        <p className="text-sm text-slate-400 mt-1">{myPolicies.length} policies</p>
+        <p className="text-sm text-slate-400 mt-1">{policies.length} policies</p>
       </div>
 
       <div className="space-y-4 animate-fade-in">
-        {myPolicies.map((p) => (
+        {policies.map((p) => (
           <div key={p.id} className="card p-5">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">

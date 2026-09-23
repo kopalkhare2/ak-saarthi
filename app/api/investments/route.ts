@@ -1,9 +1,19 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireSession } from '@/lib/auth';
+import type { Prisma } from '@prisma/client';
 
 export async function GET() {
   try {
+    const auth = await requireSession();
+    if ('response' in auth) return auth.response;
+    const { session } = auth;
+
+    const where: Prisma.InvestmentWhereInput =
+      session.role === 'client' ? { clientId: session.clientId ?? '__none__' } : {};
+
     const investments = await prisma.investment.findMany({
+      where,
       orderBy: {
         createdAt: 'desc',
       },
@@ -17,6 +27,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireSession(['advisor']);
+    if ('response' in auth) return auth.response;
+
     const body = await request.json();
     const newInvestment = await prisma.investment.create({
       data: {

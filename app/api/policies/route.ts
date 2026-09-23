@@ -1,9 +1,19 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireSession } from '@/lib/auth';
+import type { Prisma } from '@prisma/client';
 
 export async function GET() {
   try {
+    const auth = await requireSession();
+    if ('response' in auth) return auth.response;
+    const { session } = auth;
+
+    const where: Prisma.PolicyWhereInput =
+      session.role === 'client' ? { clientId: session.clientId ?? '__none__' } : {};
+
     const policies = await prisma.policy.findMany({
+      where,
       orderBy: {
         createdAt: 'desc',
       },
@@ -17,6 +27,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireSession(['advisor']);
+    if ('response' in auth) return auth.response;
+
     const body = await request.json();
     const newPolicy = await prisma.policy.create({
       data: {
@@ -37,9 +50,9 @@ export async function POST(request: Request) {
       },
     });
     return NextResponse.json(newPolicy);
-  } catch (error: any) {
+  } catch (error) {
     console.error('Failed to create policy:', error);
-    if (error.code === 'P2002') {
+    if (error instanceof Error && 'code' in error && error.code === 'P2002') {
       return NextResponse.json({ error: 'A policy with this number already exists' }, { status: 400 });
     }
     return NextResponse.json({ error: 'Failed to create policy' }, { status: 500 });

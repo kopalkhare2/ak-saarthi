@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -92,9 +91,13 @@ function NavSection({
   );
 }
 
-export default function Sidebar() {
+interface SidebarProps {
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+}
+
+export default function Sidebar({ collapsed, onToggleCollapsed }: SidebarProps) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
 
   return (
     <aside
@@ -126,7 +129,7 @@ export default function Sidebar() {
       <div className="border-t border-slate-800 py-3 px-2">
         <NavSection title="" items={bottomNav} collapsed={collapsed} pathname={pathname} />
         <button
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={onToggleCollapsed}
           className="sidebar-link w-full"
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >

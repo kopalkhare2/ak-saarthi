@@ -53,6 +53,15 @@ model Client {
   appointments        Appointment[]
   documents           ClientDocument[]
   tasks               Task[]
+  notes               Note[]
+}
+
+model Note {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now())
 }
 
 model FamilyMember {

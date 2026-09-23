@@ -2,8 +2,8 @@
 
 import { useApp } from '@/contexts/app-context';
 import StatCard from '@/components/ui/stat-card';
-import Badge, { policyStatusBadge } from '@/components/ui/badge';
-import { formatCurrency, formatDate, daysFromNow, getFullName } from '@/lib/utils';
+import Badge from '@/components/ui/badge';
+import { formatCurrency, daysFromNow, getFullName } from '@/lib/utils';
 import Link from 'next/link';
 import {
   Users,
@@ -46,7 +46,6 @@ export default function AdvisorDashboard() {
       return c.month === m;
     })
     .reduce((sum, c) => sum + c.amount, 0);
-  const totalCommission = commissions.reduce((sum, c) => sum + c.amount, 0);
   const premiumsDue = policies.filter((p) => {
     const d = daysFromNow(p.dueDate);
     return d >= 0 && d <= 30 && p.status === 'active';
@@ -210,7 +209,7 @@ export default function AdvisorDashboard() {
                     borderRadius: '8px',
                     color: '#f8fafc',
                   }}
-                  formatter={(value: any) => [`₹${Number(value).toLocaleString('en-IN')}`, 'Revenue']}
+                  formatter={(value: unknown) => [`₹${Number(value).toLocaleString('en-IN')}`, 'Revenue']}
                 />
                 <Line
                   type="monotone"

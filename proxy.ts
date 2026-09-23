@@ -1,31 +1,61 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-function decodeJwt(token: string) {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    
-    const payload = parts[1];
-    let base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
-    while (base64.length % 4) {
-      base64 += '=';
-    }
+// Edge middleware runs on the Edge runtime, which doesn't support the
+// `jsonwebtoken` package (it needs Node's crypto module). This verifies an
+// HS256 JWT's signature using the Web Crypto API instead, which Edge does
+// support, so a tampered or forged cookie is rejected here rather than only
+// being caught later by the API routes.
 
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split('')
-        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
+function base64UrlToUint8Array(base64Url: string): Uint8Array<ArrayBuffer> {
+  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(new ArrayBuffer(binary.length));
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function base64UrlDecodeToString(base64Url: string): string {
+  return new TextDecoder().decode(base64UrlToUint8Array(base64Url));
+}
+
+async function verifyJwt(token: string, secret: string): Promise<Record<string, unknown> | null> {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [headerPart, payloadPart, signaturePart] = parts;
+
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
     );
-    return JSON.parse(jsonPayload);
-  } catch (err) {
-    console.error('JWT decode error in proxy:', err);
+
+    const signature = base64UrlToUint8Array(signaturePart);
+    const data = new TextEncoder().encode(`${headerPart}.${payloadPart}`);
+    const isValid = await crypto.subtle.verify('HMAC', key, signature, data);
+    if (!isValid) return null;
+
+    const payload = JSON.parse(base64UrlDecodeToString(payloadPart));
+    return payload;
+  } catch {
     return null;
   }
 }
 
-export function proxy(request: NextRequest) {
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (secret) return secret;
+  // Matches lib/auth.ts's dev fallback so tokens signed there verify here too.
+  return 'ak-saarthi-dev-only-secret-key-do-not-use-in-prod';
+}
+
+export async function proxy(request: NextRequest) {
   const token = request.cookies.get('ak_token')?.value;
   const { pathname } = request.nextUrl;
 
@@ -33,9 +63,9 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  const decoded = decodeJwt(token);
+  const decoded = await verifyJwt(token, getJwtSecret());
   if (!decoded) {
-    // Clear invalid cookie
+    // Invalid signature or malformed token — clear the cookie
     const response = NextResponse.redirect(new URL('/login', request.url));
     response.cookies.delete('ak_token');
     return response;
@@ -43,7 +73,7 @@ export function proxy(request: NextRequest) {
 
   // Check expiration
   const currentTimestamp = Math.floor(Date.now() / 1000);
-  if (decoded.exp && currentTimestamp > decoded.exp) {
+  if (typeof decoded.exp === 'number' && currentTimestamp > decoded.exp) {
     const response = NextResponse.redirect(new URL('/login', request.url));
     response.cookies.delete('ak_token');
     return response;

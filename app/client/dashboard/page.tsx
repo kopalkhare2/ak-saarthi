@@ -1,32 +1,22 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/app-context';
 import StatCard from '@/components/ui/stat-card';
-import Badge, { policyStatusBadge } from '@/components/ui/badge';
+import { policyStatusBadge } from '@/components/ui/badge';
 import { formatCurrency, formatDate, daysFromNow } from '@/lib/utils';
 import { Shield, TrendingUp, Calendar, AlertTriangle } from 'lucide-react';
 
 export default function ClientDashboard() {
+  // The API already scopes policies/investments/appointments to the signed-in
+  // client, and `clients` will contain exactly this client's own record.
   const { clients, policies, investments, appointments } = useApp();
-  const [clientId, setClientId] = useState<string>('client-001');
-
-  useEffect(() => {
-    const id = localStorage.getItem('ak_logged_in_client_id');
-    if (id) {
-      setClientId(id);
-    }
-  }, []);
-
-  const activeClient = clients.find((c) => c.id === clientId);
+  const activeClient = clients[0];
   const firstName = activeClient ? activeClient.firstName : 'Client';
 
-  const myPolicies = policies.filter((p) => p.clientId === clientId);
-  const myInvestments = investments.filter((i) => i.clientId === clientId);
-  const activePolicies = myPolicies.filter((p) => p.status === 'active').length;
-  const totalPortfolio = myInvestments.reduce((s, i) => s + i.currentValue, 0);
-  const premiumsDue = myPolicies.filter((p) => daysFromNow(p.dueDate) >= 0 && daysFromNow(p.dueDate) <= 30).length;
-  const nextAppt = appointments.find((a) => a.clientId === clientId && a.status === 'scheduled');
+  const activePolicies = policies.filter((p) => p.status === 'active').length;
+  const totalPortfolio = investments.reduce((s, i) => s + i.currentValue, 0);
+  const premiumsDue = policies.filter((p) => daysFromNow(p.dueDate) >= 0 && daysFromNow(p.dueDate) <= 30).length;
+  const nextAppt = appointments.find((a) => a.status === 'scheduled');
 
   return (
     <div className="space-y-6">
@@ -47,7 +37,7 @@ export default function ClientDashboard() {
         <div className="card p-5 animate-fade-in">
           <h3 className="font-semibold mb-4">My Policies</h3>
           <div className="space-y-3">
-            {myPolicies.map((p) => (
+            {policies.map((p) => (
               <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
                 <div>
                   <p className="text-sm font-medium">{p.company}</p>
@@ -63,7 +53,7 @@ export default function ClientDashboard() {
         <div className="card p-5 animate-fade-in">
           <h3 className="font-semibold mb-4">My Investments</h3>
           <div className="space-y-3">
-            {myInvestments.map((i) => (
+            {investments.map((i) => (
               <div key={i.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
                 <div>
                   <p className="text-sm font-medium">{i.schemeName}</p>

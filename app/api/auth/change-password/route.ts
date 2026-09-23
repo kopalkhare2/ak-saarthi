@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import * as bcrypt from 'bcryptjs';
-import * as jwt from 'jsonwebtoken';
 import { prisma } from '@/lib/prisma';
-import { getJwtSecret } from '@/lib/auth';
+import { requireSession } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireSession();
+    if ('response' in auth) return auth.response;
+    const { session } = auth;
+
     const { currentPassword, newPassword } = await request.json();
 
     if (!currentPassword || !newPassword) {
@@ -23,36 +25,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get current user token from cookie
-    const cookieStore = await cookies();
-    const token = cookieStore.get('ak_token')?.value;
-
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please sign in.' },
-        { status: 401 }
-      );
-    }
-
-    let decoded: any;
-    try {
-      decoded = jwt.verify(token, getJwtSecret());
-    } catch (err) {
-      return NextResponse.json(
-        { error: 'Invalid or expired session' },
-        { status: 401 }
-      );
-    }
-
     const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
+      where: { id: session.userId },
     });
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Verify current password
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) {
       return NextResponse.json(
@@ -61,7 +41,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Hash new password and update
     const newHashedPassword = await bcrypt.hash(newPassword, 10);
     await prisma.user.update({
       where: { id: user.id },
@@ -72,7 +51,7 @@ export async function POST(request: Request) {
       success: true,
       message: 'Password updated successfully. You can now use your new password to sign in.',
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Failed to change password:', error);
     return NextResponse.json(
       { error: 'Failed to change password' },

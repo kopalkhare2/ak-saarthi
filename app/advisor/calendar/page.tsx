@@ -2,11 +2,10 @@
 
 import { useState } from 'react';
 import { useApp } from '@/contexts/app-context';
-import Badge from '@/components/ui/badge';
 import Modal from '@/components/ui/modal';
 import { generateId, getFullName, formatDate } from '@/lib/utils';
-import type { Appointment, AppointmentType } from '@/lib/types';
-import { Calendar as CalIcon, Plus, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import type { AppointmentType } from '@/lib/types';
+import { Plus, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 
 const appointmentColors: Record<string, string> = {
   meeting: 'bg-blue-500', follow_up: 'bg-amber-500', call: 'bg-emerald-500', review: 'bg-purple-500',

@@ -1,36 +1,22 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import * as jwt from 'jsonwebtoken';
-import { getJwtSecret } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
 
 export async function GET() {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('ak_token')?.value;
+    const session = await getSession();
 
-    if (!token) {
+    if (!session) {
       return NextResponse.json({ user: null }, { status: 401 });
     }
 
-    try {
-      const decoded = jwt.verify(token, getJwtSecret()) as {
-        userId: string;
-        email: string;
-        role: string;
-        clientId?: string;
-      };
-
-      return NextResponse.json({
-        user: {
-          id: decoded.userId,
-          email: decoded.email,
-          role: decoded.role,
-          clientId: decoded.clientId,
-        },
-      });
-    } catch (err) {
-      return NextResponse.json({ user: null }, { status: 401 });
-    }
+    return NextResponse.json({
+      user: {
+        id: session.userId,
+        email: session.email,
+        role: session.role,
+        clientId: session.clientId,
+      },
+    });
   } catch (error) {
     console.error('Session check error:', error);
     return NextResponse.json(

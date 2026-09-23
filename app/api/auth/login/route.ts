@@ -5,11 +5,10 @@ import * as jwt from 'jsonwebtoken';
 import { prisma } from '@/lib/prisma';
 import { getJwtSecret } from '@/lib/auth';
 import { ensureSeeded } from '@/lib/init-db';
-import { getStoreAdvisors } from '@/lib/kv-store';
 
 export async function POST(request: Request) {
   try {
-    // Ensure default accounts exist if DB is fresh
+    // Ensure default demo accounts exist if the DB is fresh
     await ensureSeeded();
 
     const { email: rawEmail, password, role: requestedRole } = await request.json();
@@ -23,65 +22,27 @@ export async function POST(request: Request) {
 
     const email = rawEmail.toLowerCase().trim();
 
-    // Find user (case-insensitive email matching)
     let user = await prisma.user.findFirst({
-      where: {
-        email: {
-          equals: email,
-        },
-      },
+      where: { email: { equals: email } },
     });
 
-    // Special auto-provisioning for kopalkhare2@gmail.com as Advisor if missing
-    if (!user && email === 'kopalkhare2@gmail.com') {
-      try {
+    // Auto-provision a Client User account if a Client profile already exists
+    // (e.g. one created by an advisor) but no login has been set up for it yet.
+    if (!user) {
+      const clientRecord = await prisma.client.findFirst({
+        where: { email: { equals: email }, isDeleted: false },
+      });
+      if (clientRecord) {
         const hashedPassword = await bcrypt.hash(password, 10);
         user = await prisma.user.create({
           data: {
-            email: 'kopalkhare2@gmail.com',
+            email: clientRecord.email.toLowerCase().trim(),
             password: hashedPassword,
-            role: 'advisor',
+            role: 'client',
+            clientId: clientRecord.id,
           },
         });
-      } catch (e) {}
-    }
-
-    // Check persistent KV store for advisor accounts
-    if (!user) {
-      const storeAdvisors = getStoreAdvisors();
-      const kvAdvisor = storeAdvisors.find((a) => a.email.toLowerCase() === email);
-      if (kvAdvisor) {
-        const isMatch = await bcrypt.compare(password, kvAdvisor.passwordHash);
-        if (isMatch) {
-          user = {
-            id: kvAdvisor.id,
-            email: kvAdvisor.email,
-            password: kvAdvisor.passwordHash,
-            role: 'advisor',
-            clientId: null,
-          } as any;
-        }
       }
-    }
-
-    // Auto-provision Client User account if Client profile exists but User account hasn't been created yet
-    if (!user) {
-      try {
-        const clientRecord = await prisma.client.findFirst({
-          where: { email: { equals: email } },
-        });
-        if (clientRecord) {
-          const hashedPassword = await bcrypt.hash(password || 'password', 10);
-          user = await prisma.user.create({
-            data: {
-              email: clientRecord.email.toLowerCase().trim(),
-              password: hashedPassword,
-              role: 'client',
-              clientId: clientRecord.id,
-            },
-          });
-        }
-      } catch (e) {}
     }
 
     if (!user) {
@@ -101,25 +62,24 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check password
-    let isMatch = await bcrypt.compare(password, user.password);
-
-    // Fallback password check for admin account
-    if (!isMatch && email === 'kopalkhare2@gmail.com' && (password === 'password' || password === 'password123')) {
-      isMatch = true;
-      // Re-hash for security
-      const newHash = await bcrypt.hash(password, 10);
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { password: newHash },
-      });
-    }
-
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
       );
+    }
+
+    // A soft-deleted client's login should stop working immediately, even
+    // though their historical data is preserved for the advisor.
+    if (user.role === 'client' && user.clientId) {
+      const client = await prisma.client.findUnique({ where: { id: user.clientId } });
+      if (!client || client.isDeleted) {
+        return NextResponse.json(
+          { error: 'This account is no longer active. Please contact your advisor.' },
+          { status: 403 }
+        );
+      }
     }
 
     // Generate JWT
@@ -152,7 +112,7 @@ export async function POST(request: Request) {
       role: user.role,
       clientId: user.clientId,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(
       { error: 'Internal Server Error' },

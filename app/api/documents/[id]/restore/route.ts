@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireSession } from '@/lib/auth';
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSession(['advisor']);
+    if ('response' in auth) return auth.response;
+
     const { id } = await params;
 
     const doc = await prisma.clientDocument.findUnique({ where: { id } });

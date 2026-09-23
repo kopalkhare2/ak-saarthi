@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { AppProvider, useApp } from '@/contexts/app-context';
+import LoadingScreen from '@/components/ui/loading-screen';
 import { getFullName, getInitials } from '@/lib/utils';
 import {
-  LayoutDashboard, Shield, TrendingUp, Calendar, FolderOpen,
-  User, Sparkles, LogOut, Bot,
+  LayoutDashboard, Shield, TrendingUp,
+  User, Sparkles, LogOut,
 } from 'lucide-react';
 
 const navItems = [
@@ -20,43 +20,24 @@ const navItems = [
 function ClientPortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { clients } = useApp();
-  const [clientId, setClientId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  // proxy.ts already redirects unauthenticated/wrong-role requests to /login
+  // before this ever renders; `clients[0]` is the signed-in client's own record.
+  const { clients, isLoading } = useApp();
+  const activeClient = clients[0];
 
-  useEffect(() => {
-    const activeId = localStorage.getItem('ak_logged_in_client_id');
-    const role = localStorage.getItem('ak_logged_in_role');
-    
-    if (!activeId || role !== 'client') {
-      // No active client session, redirect to login
-      router.push('/login');
-    } else {
-      setClientId(activeId);
-      setLoading(false);
-    }
-  }, [router]);
-
-  const activeClient = clients.find((c) => c.id === clientId);
-  
   const clientName = activeClient ? getFullName(activeClient.firstName, activeClient.lastName) : 'Client';
   const initials = activeClient ? getInitials(activeClient.firstName, activeClient.lastName) : 'C';
 
-  const handleSignOut = () => {
-    localStorage.removeItem('ak_logged_in_role');
-    localStorage.removeItem('ak_logged_in_client_id');
-    router.push('/login');
+  const handleSignOut = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } finally {
+      router.push('/login');
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-[var(--navy-950)] text-white">
-        <div className="text-center space-y-2 animate-pulse">
-          <Sparkles size={32} className="text-blue-500 mx-auto" />
-          <p className="text-sm text-slate-400">Loading portal...</p>
-        </div>
-      </div>
-    );
+  if (isLoading) {
+    return <LoadingScreen />;
   }
 
   return (
@@ -123,4 +104,3 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     </AppProvider>
   );
 }
-

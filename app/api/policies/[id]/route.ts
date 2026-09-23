@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireSession } from '@/lib/auth';
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSession();
+    if ('response' in auth) return auth.response;
+    const { session } = auth;
+
     const { id } = await params;
     const policy = await prisma.policy.findUnique({
       where: { id },
@@ -13,6 +18,10 @@ export async function GET(
 
     if (!policy) {
       return NextResponse.json({ error: 'Policy not found' }, { status: 404 });
+    }
+
+    if (session.role === 'client' && policy.clientId !== session.clientId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     return NextResponse.json(policy);
@@ -27,6 +36,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSession(['advisor']);
+    if ('response' in auth) return auth.response;
+
     const { id } = await params;
     const body = await request.json();
 
@@ -62,6 +74,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSession(['advisor']);
+    if ('response' in auth) return auth.response;
+
     const { id } = await params;
     await prisma.policy.delete({
       where: { id },

@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useApp } from '@/contexts/app-context';
 import Badge, { policyStatusBadge } from '@/components/ui/badge';
 import EmptyState from '@/components/ui/empty-state';
 import Modal from '@/components/ui/modal';
-import { formatCurrency, formatDate, getFullName, searchFilter, generateId, policyTypeLabels, daysFromNow, formatPhoneForWhatsapp } from '@/lib/utils';
-import type { Policy, PolicyType, PolicyStatus } from '@/lib/types';
-import { Shield, Plus, Search, AlertTriangle, MessageSquare, Send, Check, Copy, ToggleLeft, ToggleRight, FileText, CheckCircle, Mail, Clock, Bell } from 'lucide-react';
+import { formatCurrency, formatDate, getFullName, generateId, policyTypeLabels, daysFromNow, formatPhoneForWhatsapp } from '@/lib/utils';
+import type { Policy, PolicyType } from '@/lib/types';
+import { Shield, Plus, Search, AlertTriangle, MessageSquare, Send, Check, Copy, ToggleLeft, ToggleRight, CheckCircle, Mail, Clock, Bell } from 'lucide-react';
 
 interface AutoReminderLog {
   id: string;
@@ -41,7 +41,6 @@ export default function PoliciesPage() {
 
   // Automation state
   const [autoRemindersEnabled, setAutoRemindersEnabled] = useState(true);
-  const [autoLogs, setAutoLogs] = useState<AutoReminderLog[]>([]);
   const [manualLogs, setManualLogs] = useState<AutoReminderLog[]>([]);
   const [msgLanguage, setMsgLanguage] = useState<'en' | 'hi'>('en');
 
@@ -63,51 +62,53 @@ export default function PoliciesPage() {
   });
   const set = (f: string, v: string | number) => setForm((p) => ({ ...p, [f]: v }));
 
-  // Load / Generate mock logs if enabled
-  useEffect(() => {
-    if (autoRemindersEnabled) {
-      // Find due and lapsed policies to generate realistic automated reminder logs
-      const logs: AutoReminderLog[] = [];
-      let delay = 10; // minutes ago
-      
-      policies.forEach((p) => {
-        const days = daysFromNow(p.dueDate);
-        const client = clients.find((c) => c.id === p.clientId);
-        if (!client) return;
-        const name = getFullName(client.firstName, client.lastName);
-        
-        if (p.status === 'lapsed') {
-          logs.push({
-            id: `log-${p.id}`,
-            clientName: name,
-            policyNumber: p.policyNumber,
-            company: p.company,
-            type: 'revival',
-            method: Math.random() > 0.5 ? 'WhatsApp' : 'Email',
-            timestamp: `${delay} mins ago`,
-            status: 'Delivered',
-            paymentLink: getPaymentLink(p.company),
-          });
-          delay += 45;
-        } else if (days >= -30 && days <= 30) {
-          logs.push({
-            id: `log-${p.id}`,
-            clientName: name,
-            policyNumber: p.policyNumber,
-            company: p.company,
-            type: 'renewal',
-            method: Math.random() > 0.5 ? 'WhatsApp' : 'Email',
-            timestamp: `${delay} mins ago`,
-            status: 'Sent',
-            paymentLink: getPaymentLink(p.company),
-          });
-          delay += 30;
-        }
-      });
-      setAutoLogs(logs.slice(0, 5)); // Keep top 5 logs
-    } else {
-      setAutoLogs([]);
-    }
+  // Derive mock automated-reminder logs from due/lapsed policies (top 5)
+  const autoLogs = useMemo<AutoReminderLog[]>(() => {
+    if (!autoRemindersEnabled) return [];
+
+    const logs: AutoReminderLog[] = [];
+    let delay = 10; // minutes ago
+
+    policies.forEach((p) => {
+      const days = daysFromNow(p.dueDate);
+      const client = clients.find((c) => c.id === p.clientId);
+      if (!client) return;
+      const name = getFullName(client.firstName, client.lastName);
+
+      // Deterministic (not Math.random()) so this mock log is stable across
+      // re-renders — alternate the channel by policy id instead.
+      const mockChannel: 'WhatsApp' | 'Email' = p.id.charCodeAt(p.id.length - 1) % 2 === 0 ? 'WhatsApp' : 'Email';
+
+      if (p.status === 'lapsed') {
+        logs.push({
+          id: `log-${p.id}`,
+          clientName: name,
+          policyNumber: p.policyNumber,
+          company: p.company,
+          type: 'revival',
+          method: mockChannel,
+          timestamp: `${delay} mins ago`,
+          status: 'Delivered',
+          paymentLink: getPaymentLink(p.company),
+        });
+        delay += 45;
+      } else if (days >= -30 && days <= 30) {
+        logs.push({
+          id: `log-${p.id}`,
+          clientName: name,
+          policyNumber: p.policyNumber,
+          company: p.company,
+          type: 'renewal',
+          method: mockChannel,
+          timestamp: `${delay} mins ago`,
+          status: 'Sent',
+          paymentLink: getPaymentLink(p.company),
+        });
+        delay += 30;
+      }
+    });
+
+    return logs.slice(0, 5);
   }, [autoRemindersEnabled, policies, clients]);
 
   // ── Scheduled Auto-Dispatch Logic ──────────────────
@@ -280,7 +281,7 @@ export default function PoliciesPage() {
       const month = String(d.getMonth() + 1).padStart(2, '0');
       const year = d.getFullYear();
       return `${day}/${month}/${year}`;
-    } catch (e) {
+    } catch {
       return dobString;
     }
   };
@@ -370,9 +371,11 @@ export default function PoliciesPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Only ever invoked from a button's onClick below, never during render.
   const addManualLog = (method: 'WhatsApp' | 'Email') => {
     if (!selectedPolicyForReminder || !clientForReminder) return;
     const newLog: AutoReminderLog = {
+      // eslint-disable-next-line react-hooks/purity -- event-handler only, not render
       id: `manual-log-${Date.now()}`,
       clientName: getFullName(clientForReminder.firstName, clientForReminder.lastName),
       policyNumber: selectedPolicyForReminder.policyNumber,
@@ -519,7 +522,7 @@ export default function PoliciesPage() {
           <div className="lg:col-span-2 card p-5 space-y-3 bg-slate-900/30">
             <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Reminder Dispatch Logs (Today)</h4>
             {[...manualLogs, ...autoLogs].length === 0 ? (
-              <p className="text-xs text-slate-500 py-4 text-center">No reminders dispatched yet. Select "Notice Alert" below to send manually.</p>
+              <p className="text-xs text-slate-500 py-4 text-center">No reminders dispatched yet. Select &quot;Notice Alert&quot; below to send manually.</p>
             ) : (
               <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
                 {[...manualLogs, ...autoLogs].map((log) => (

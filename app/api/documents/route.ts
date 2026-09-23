@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireSession } from '@/lib/auth';
 import fs from 'fs';
 import path from 'path';
 
@@ -22,6 +23,10 @@ const ALLOWED_MIME_TYPES = [
 
 export async function GET(request: Request) {
   try {
+    const auth = await requireSession();
+    if ('response' in auth) return auth.response;
+    const { session } = auth;
+
     const { searchParams } = new URL(request.url);
     const showTrash = searchParams.get('trash') === 'true';
     const clientId = searchParams.get('clientId');
@@ -29,7 +34,11 @@ export async function GET(request: Request) {
     const where: Record<string, unknown> = {
       isDeleted: showTrash,
     };
-    if (clientId) {
+
+    if (session.role === 'client') {
+      // Clients can only ever see their own documents, regardless of the query param.
+      where.clientId = session.clientId ?? '__none__';
+    } else if (clientId) {
       where.clientId = clientId;
     }
 
@@ -48,6 +57,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireSession(['advisor']);
+    if ('response' in auth) return auth.response;
+
     const contentType = request.headers.get('content-type') || '';
 
     // Handle multipart file upload

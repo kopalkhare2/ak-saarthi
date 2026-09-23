@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import fs from 'fs';
 import path from 'path';
 
 // GET: Download a backup of the entire SQLite database
 export async function GET() {
   try {
+    const auth = await requireSession(['advisor']);
+    if ('response' in auth) return auth.response;
+
     const dbPath = path.join(process.cwd(), 'prisma', 'dev.db');
 
     if (!fs.existsSync(dbPath)) {

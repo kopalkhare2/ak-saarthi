@@ -93,13 +93,9 @@ export default function RegisterPage() {
         return;
       }
 
-      // Auto-login successful — redirect to client dashboard
-      localStorage.setItem('ak_logged_in_role', data.role);
-      if (data.clientId) {
-        localStorage.setItem('ak_logged_in_client_id', data.clientId);
-      }
+      // Auto-login successful (server has set the session cookie already)
       router.push('/client/dashboard');
-    } catch (err) {
+    } catch {
       setError('An error occurred. Please try again.');
       setLoading(false);
     }

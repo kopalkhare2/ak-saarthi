@@ -20,19 +20,7 @@ export async function ensureSeeded() {
       });
     }
 
-    // 2. Ensure Custom Admin Advisor Account
-    const adminAdvisor = await prisma.user.findFirst({ where: { email: 'kopalkhare2@gmail.com' } });
-    if (!adminAdvisor) {
-      await prisma.user.create({
-        data: {
-          email: 'kopalkhare2@gmail.com',
-          password: hashedPassword,
-          role: 'advisor',
-        },
-      });
-    }
-
-    // 3. Ensure Advisor Profile
+    // 2. Ensure Advisor Profile
     const profile = await prisma.advisorProfile.findUnique({ where: { id: 'profile' } });
     if (!profile) {
       await prisma.advisorProfile.create({

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Sparkles, Eye, EyeOff, AlertCircle, ShieldCheck, UserCheck, HelpCircle, CheckCircle } from 'lucide-react';
+import { Sparkles, Eye, EyeOff, AlertCircle, ShieldCheck, UserCheck, CheckCircle } from 'lucide-react';
 import Modal from '@/components/ui/modal';
 
 export default function LoginPage() {
@@ -22,12 +22,12 @@ export default function LoginPage() {
   const [requestPhone, setRequestPhone] = useState('');
   const [requestSuccess, setRequestSuccess] = useState(false);
 
-  // Clear inputs when role changes
-  useEffect(() => {
+  const switchRole = (nextRole: 'advisor' | 'client') => {
+    setRole(nextRole);
     setEmail('');
     setPassword('');
     setError('');
-  }, [role]);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,20 +49,13 @@ export default function LoginPage() {
         return;
       }
 
-      // Successful login
-      localStorage.setItem('ak_logged_in_role', data.role);
-      if (data.clientId) {
-        localStorage.setItem('ak_logged_in_client_id', data.clientId);
-      } else {
-        localStorage.removeItem('ak_logged_in_client_id');
-      }
-
+      // Successful login (server has set the session cookie already)
       if (data.role === 'advisor') {
         router.push('/advisor/dashboard');
       } else {
         router.push('/client/dashboard');
       }
-    } catch (err) {
+    } catch {
       setError('An error occurred during login. Please try again.');
     } finally {
       setLoading(false);
@@ -92,7 +85,7 @@ export default function LoginPage() {
         setRequestEmail('');
         setRequestPhone('');
       }, 3000);
-    } catch (err) {
+    } catch {
       alert('Failed to submit access request. Please try again.');
     }
   };
@@ -149,7 +142,7 @@ export default function LoginPage() {
           {/* Role Toggle */}
           <div className="flex gap-1 bg-slate-900 p-1 rounded-xl mb-6">
             <button
-              onClick={() => setRole('advisor')}
+              onClick={() => switchRole('advisor')}
               className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${
                 role === 'advisor' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' : 'text-slate-400 hover:text-white'
               }`}
@@ -158,7 +151,7 @@ export default function LoginPage() {
               Advisor Portal
             </button>
             <button
-              onClick={() => setRole('client')}
+              onClick={() => switchRole('client')}
               className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${
                 role === 'client' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' : 'text-slate-400 hover:text-white'
               }`}
@@ -174,7 +167,7 @@ export default function LoginPage() {
               <p>
                 🔒 <strong className="text-yellow-400">Advisor Access Restricted:</strong> Only authorized advisors can sign in.
                 <br />
-                Demo Credentials: <span className="text-slate-300 font-mono">advisor@aksaarthi.com</span> or <span className="text-slate-300 font-mono">kopalkhare2@gmail.com</span> (Password: <span className="text-slate-300 font-mono">password</span>)
+                Demo Credentials: <span className="text-slate-300 font-mono">advisor@aksaarthi.com</span> (Password: <span className="text-slate-300 font-mono">password</span>)
               </p>
             ) : (
               <p>
@@ -200,7 +193,7 @@ export default function LoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder={role === 'advisor' ? 'kopalkhare2@gmail.com' : 'rajesh.sharma@email.com'}
+                placeholder={role === 'advisor' ? 'advisor@aksaarthi.com' : 'rajesh.sharma@email.com'}
                 required
               />
             </div>

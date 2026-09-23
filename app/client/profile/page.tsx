@@ -1,23 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/app-context';
 import Badge, { riskProfileBadge } from '@/components/ui/badge';
 import { getFullName, formatDate, formatCurrency } from '@/lib/utils';
-import { User, CreditCard, Users as UsersIcon, Banknote, Shield, MapPin, Phone, Mail, Briefcase } from 'lucide-react';
+import { User, CreditCard, Users as UsersIcon, Shield, MapPin } from 'lucide-react';
+
+function InfoRow({ label, value }: { label: string; value?: string | number }) {
+  return (
+    <div className="flex justify-between py-3 border-b border-slate-800/50">
+      <span className="text-sm text-slate-500">{label}</span>
+      <span className="text-sm font-medium text-slate-200">{value || '—'}</span>
+    </div>
+  );
+}
 
 export default function ClientProfilePage() {
+  // The API scopes /api/clients to the signed-in client, so this is their own record.
   const { clients } = useApp();
-  const [clientId, setClientId] = useState<string>('client-001');
-
-  useEffect(() => {
-    const id = localStorage.getItem('ak_logged_in_client_id');
-    if (id) {
-      setClientId(id);
-    }
-  }, []);
-
-  const client = clients.find((c) => c.id === clientId);
+  const client = clients[0];
 
   if (!client) {
     return (
@@ -26,13 +26,6 @@ export default function ClientProfilePage() {
       </div>
     );
   }
-
-  const InfoRow = ({ label, value }: { label: string; value?: string | number }) => (
-    <div className="flex justify-between py-3 border-b border-slate-800/50">
-      <span className="text-sm text-slate-500">{label}</span>
-      <span className="text-sm font-medium text-slate-200">{value || '—'}</span>
-    </div>
-  );
 
   return (
     <div className="space-y-6">
@@ -165,7 +158,7 @@ export default function ClientProfilePage() {
                 msgEl.className = 'text-xs text-emerald-400 mt-2';
                 formEl.reset();
               }
-            } catch (err) {
+            } catch {
               msgEl.innerText = '❌ Request failed';
               msgEl.className = 'text-xs text-red-400 mt-2';
             }

@@ -12,6 +12,9 @@ import {
   mockPrismaModule,
   createCookiesMock,
   clearMockCookies,
+  setAdvisorSession,
+  setClientSession,
+  getTestPrisma,
 } from '../helpers/setup';
 
 jest.mock('@/lib/prisma', () => mockPrismaModule());
@@ -35,11 +38,13 @@ afterAll(async () => {
 beforeEach(async () => {
   await clearDatabase();
   clearMockCookies();
+  setAdvisorSession();
 });
 
 describe('GET /api/clients', () => {
   it('should return an empty array when no clients exist', async () => {
-    const res = await getClients();
+    const req = createMockRequest('/api/clients');
+    const res = await getClients(req);
     const data = await res.json();
 
     expect(res.status).toBe(200);
@@ -51,11 +56,35 @@ describe('GET /api/clients', () => {
     await createTestClient({ email: 'client1@test.com' });
     await createTestClient({ email: 'client2@test.com' });
 
-    const res = await getClients();
+    const req = createMockRequest('/api/clients');
+    const res = await getClients(req);
     const data = await res.json();
 
     expect(res.status).toBe(200);
     expect(data).toHaveLength(2);
+  });
+
+  it('should return 401 for an unauthenticated request', async () => {
+    clearMockCookies(); // no session at all
+    const req = createMockRequest('/api/clients');
+    const res = await getClients(req);
+
+    expect(res.status).toBe(401);
+  });
+
+  it('should scope a client-role session to only their own record', async () => {
+    const clientA = await createTestClient({ email: 'client-a@test.com' });
+    const clientB = await createTestClient({ email: 'client-b@test.com' });
+    setClientSession(clientA.id);
+
+    const req = createMockRequest('/api/clients');
+    const res = await getClients(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data).toHaveLength(1);
+    expect(data[0].id).toBe(clientA.id);
+    expect(data.some((c: { id: string }) => c.id === clientB.id)).toBe(false);
   });
 });
 
@@ -124,6 +153,19 @@ describe('POST /api/clients', () => {
 
     expect(res.status).toBe(400);
     expect(data.error).toContain('already exists');
+  });
+
+  it('should return 403 when a client-role session tries to create a client', async () => {
+    const existingClient = await createTestClient({ email: 'existing@test.com' });
+    setClientSession(existingClient.id);
+
+    const req = createMockRequest('/api/clients', {
+      method: 'POST',
+      body: { firstName: 'Someone', lastName: 'Else', email: 'someone@test.com' },
+    });
+
+    const res = await createClient(req);
+    expect(res.status).toBe(403);
   });
 });
 
@@ -213,18 +255,22 @@ describe('DELETE /api/clients/:id', () => {
     expect(data.error).toBe('Client not found');
   });
 
-  it('should also delete the linked user account', async () => {
+  it('soft-deletes the client but keeps the linked user account intact', async () => {
+    // DELETE is a soft delete (isDeleted: true) so the client can be restored
+    // from trash later — it must not touch the linked login account. Only the
+    // separate "permanent delete" endpoint removes the user record.
     const client = await createTestClient({ email: 'linked-user@test.com' });
     await createTestUser({ email: 'linked-user@test.com', password: 'pass123', role: 'client' });
 
     const req = createMockRequest(`/api/clients/${client.id}`, { method: 'DELETE' });
     await deleteClient(req, { params: Promise.resolve({ id: client.id }) });
 
-    // Verify user was also deleted
-    const { getTestPrisma } = require('../helpers/setup');
+    const updatedClient = await getTestPrisma().client.findUnique({ where: { id: client.id } });
+    expect(updatedClient?.isDeleted).toBe(true);
+
     const userCount = await getTestPrisma().user.count({
       where: { email: 'linked-user@test.com' },
     });
-    expect(userCount).toBe(0);
+    expect(userCount).toBe(1);
   });
 });

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireSession } from '@/lib/auth';
+import type { Task } from '@prisma/client';
 
 // Helper to parse dates and calculate difference in days
 function getDaysDifference(dateString: string): number {
@@ -14,8 +16,19 @@ function getDaysDifference(dateString: string): number {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 
+interface NotificationTriggered {
+  policyNumber: string;
+  clientName: string;
+  dueDate: string;
+  daysRemaining: number;
+  premium: number;
+}
+
 export async function GET() {
   try {
+    const auth = await requireSession(['advisor']);
+    if ('response' in auth) return auth.response;
+
     // 1. Fetch active policies
     const activePolicies = await prisma.policy.findMany({
       where: {
@@ -26,8 +39,8 @@ export async function GET() {
       },
     });
 
-    const tasksCreated: any[] = [];
-    const notificationsTriggered: any[] = [];
+    const tasksCreated: Task[] = [];
+    const notificationsTriggered: NotificationTriggered[] = [];
 
     // 2. Scan and find policies due in the next 30 days
     for (const policy of activePolicies) {
@@ -83,7 +96,7 @@ export async function GET() {
       notifications: notificationsTriggered,
       newTasks: tasksCreated,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Failed to run automated reminders engine:', error);
     return NextResponse.json(
       { error: 'Failed to run automation engine' },

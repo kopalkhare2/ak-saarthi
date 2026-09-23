@@ -11,6 +11,8 @@ import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import * as bcrypt from 'bcryptjs';
+import * as jwt from 'jsonwebtoken';
 
 // ---------------------------------------------------------------------------
 // Test database — use a temp file-based SQLite so Prisma migrations work.
@@ -94,7 +96,7 @@ export function mockPrismaModule() {
       {},
       {
         get(_target, prop) {
-          return (testPrisma as any)[prop];
+          return (testPrisma as unknown as Record<PropertyKey, unknown>)[prop];
         },
       }
     ),
@@ -102,7 +104,7 @@ export function mockPrismaModule() {
       {},
       {
         get(_target, prop) {
-          return (testPrisma as any)[prop];
+          return (testPrisma as unknown as Record<PropertyKey, unknown>)[prop];
         },
       }
     ),
@@ -145,10 +147,56 @@ export function createCookiesMock() {
 }
 
 // ---------------------------------------------------------------------------
+// Session mocking — every route now requires an authenticated session via
+// lib/auth.ts's requireSession(), which reads/verifies the `ak_token` cookie.
+// Sign a real token with the same (dev-fallback) secret and drop it into the
+// mocked cookie store so route handlers see a valid session in tests.
+// ---------------------------------------------------------------------------
+
+// Kept in sync with lib/auth.ts's DEV_FALLBACK — not imported from there
+// directly because that module pulls in `next/headers`, and importing it here
+// would create a require cycle through the jest.mock('next/headers', ...)
+// factory (which itself closes over this file's exports).
+const TEST_JWT_SECRET = process.env.JWT_SECRET || 'ak-saarthi-dev-only-secret-key-do-not-use-in-prod';
+
+export function signSessionToken(payload: {
+  userId: string;
+  email: string;
+  role: 'advisor' | 'client';
+  clientId?: string | null;
+}): string {
+  return jwt.sign(payload, TEST_JWT_SECRET, { expiresIn: '7d' });
+}
+
+export function setAdvisorSession(overrides: { userId?: string; email?: string } = {}) {
+  setMockCookie(
+    'ak_token',
+    signSessionToken({
+      userId: overrides.userId || 'test-advisor',
+      email: overrides.email || 'advisor@test.com',
+      role: 'advisor',
+      clientId: null,
+    })
+  );
+}
+
+export function setClientSession(clientId: string, overrides: { userId?: string; email?: string } = {}) {
+  setMockCookie(
+    'ak_token',
+    signSessionToken({
+      userId: overrides.userId || `test-client-user-${clientId}`,
+      email: overrides.email || 'client@test.com',
+      role: 'client',
+      clientId,
+    })
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Factory helpers for creating test data
 // ---------------------------------------------------------------------------
 
-export async function createTestClient(overrides: Partial<any> = {}) {
+export async function createTestClient(overrides: Record<string, unknown> = {}) {
   return testPrisma.client.create({
     data: {
       firstName: 'Test',
@@ -171,8 +219,7 @@ export async function createTestClient(overrides: Partial<any> = {}) {
   });
 }
 
-export async function createTestUser(overrides: Partial<any> = {}) {
-  const bcrypt = require('bcryptjs');
+export async function createTestUser(overrides: { email?: string; password?: string; role?: string; clientId?: string } = {}) {
   const hashedPassword = await bcrypt.hash(overrides.password || 'password123', 10);
   return testPrisma.user.create({
     data: {
@@ -184,7 +231,7 @@ export async function createTestUser(overrides: Partial<any> = {}) {
   });
 }
 
-export async function createTestPolicy(clientId: string, overrides: Partial<any> = {}) {
+export async function createTestPolicy(clientId: string, overrides: Record<string, unknown> = {}) {
   return testPrisma.policy.create({
     data: {
       clientId,
@@ -203,7 +250,7 @@ export async function createTestPolicy(clientId: string, overrides: Partial<any>
   });
 }
 
-export async function createTestTask(overrides: Partial<any> = {}) {
+export async function createTestTask(overrides: Record<string, unknown> = {}) {
   return testPrisma.task.create({
     data: {
       title: 'Test Task',
@@ -214,7 +261,7 @@ export async function createTestTask(overrides: Partial<any> = {}) {
   });
 }
 
-export async function createTestInvestment(clientId: string, overrides: Partial<any> = {}) {
+export async function createTestInvestment(clientId: string, overrides: Record<string, unknown> = {}) {
   return testPrisma.investment.create({
     data: {
       clientId,
@@ -230,7 +277,7 @@ export async function createTestInvestment(clientId: string, overrides: Partial<
   });
 }
 
-export async function createTestDocument(clientId: string, overrides: Partial<any> = {}) {
+export async function createTestDocument(clientId: string, overrides: Record<string, unknown> = {}) {
   return testPrisma.clientDocument.create({
     data: {
       clientId,
@@ -251,7 +298,7 @@ export function createMockRequest(
   url: string,
   options: {
     method?: string;
-    body?: any;
+    body?: unknown;
     headers?: Record<string, string>;
   } = {}
 ): Request {

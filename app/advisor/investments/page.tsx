@@ -5,9 +5,9 @@ import { useApp } from '@/contexts/app-context';
 import Badge from '@/components/ui/badge';
 import Modal from '@/components/ui/modal';
 import StatCard from '@/components/ui/stat-card';
-import { formatCurrency, getFullName, investmentTypeLabels, generateId, searchFilter } from '@/lib/utils';
-import type { Investment, InvestmentType } from '@/lib/types';
-import { TrendingUp, Wallet, PieChart as PieChartIcon, Plus, Search, BarChart } from 'lucide-react';
+import { formatCurrency, getFullName, investmentTypeLabels, generateId } from '@/lib/utils';
+import type { InvestmentType } from '@/lib/types';
+import { TrendingUp, Wallet, Plus, Search, BarChart } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 
 const PIE_COLORS = ['#facc15', '#3b82f6', '#22c55e', '#ef4444', '#a855f7', '#f97316', '#06b6d4', '#ec4899', '#84cc16'];
@@ -93,7 +93,7 @@ export default function InvestmentsPage() {
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={3} dataKey="value">
                   {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                 </Pie>
-                <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#f8fafc' }} formatter={(v: any) => formatCurrency(Number(v))} />
+                <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#f8fafc' }} formatter={(v: unknown) => formatCurrency(Number(v))} />
               </PieChart>
             </ResponsiveContainer>
           </div>

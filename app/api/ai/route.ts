@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { prisma } from '@/lib/prisma';
+import { requireSession } from '@/lib/auth';
 import { formatCurrency, getFullName } from '@/lib/utils';
+import type { Client, Policy, Investment } from '@prisma/client';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // Fallback mock engine (original logic) in case API key is missing
-function getMockResponse(query: string, data: { clients: any[]; policies: any[]; investments: any[] }): string {
+function getMockResponse(query: string, data: { clients: Client[]; policies: Policy[]; investments: Investment[] }): string {
   const q = query.toLowerCase();
   const { clients, policies, investments } = data;
 
@@ -28,11 +30,11 @@ function getMockResponse(query: string, data: { clients: any[]; policies: any[];
   }
 
   if (q.includes('renewal') && !q.includes('draft')) {
-    const upcoming = policies.filter((p: any) => p.renewalStatus === 'due');
+    const upcoming = policies.filter((p) => p.renewalStatus === 'due');
     if (upcoming.length === 0) return "Great news! No upcoming renewals at the moment.";
     return `**Upcoming Renewals (${upcoming.length})**\n\n` +
-      upcoming.map((p: any) => {
-        const c = clients.find((cl: any) => cl.id === p.clientId);
+      upcoming.map((p) => {
+        const c = clients.find((cl) => cl.id === p.clientId);
         return `• **${c ? getFullName(c.firstName, c.lastName) : 'Unknown'}** — ${p.company} (${p.policyNumber}) — Premium: ${formatCurrency(p.premium)}`;
       }).join('\n');
   }
@@ -45,11 +47,11 @@ function getMockResponse(query: string, data: { clients: any[]; policies: any[];
   }
 
   if (q.includes('insurance gap') || q.includes('gap')) {
-    const noHealth = clients.filter((c: any) => !policies.some((p: any) => p.clientId === c.id && p.type === 'health'));
-    const noTerm = clients.filter((c: any) => !policies.some((p: any) => p.clientId === c.id && (p.type === 'term' || p.type === 'life')));
+    const noHealth = clients.filter((c) => !policies.some((p) => p.clientId === c.id && p.type === 'health'));
+    const noTerm = clients.filter((c) => !policies.some((p) => p.clientId === c.id && (p.type === 'term' || p.type === 'life')));
     return `**Insurance Gap Analysis**\n\n` +
-      `• **No Health Insurance:** ${noHealth.length > 0 ? noHealth.map((c: any) => getFullName(c.firstName, c.lastName)).join(', ') : 'All clients covered ✓'}\n` +
-      `• **No Life/Term Insurance:** ${noTerm.length > 0 ? noTerm.map((c: any) => getFullName(c.firstName, c.lastName)).join(', ') : 'All clients covered ✓'}\n\n` +
+      `• **No Health Insurance:** ${noHealth.length > 0 ? noHealth.map((c) => getFullName(c.firstName, c.lastName)).join(', ') : 'All clients covered ✓'}\n` +
+      `• **No Life/Term Insurance:** ${noTerm.length > 0 ? noTerm.map((c) => getFullName(c.firstName, c.lastName)).join(', ') : 'All clients covered ✓'}\n\n` +
       `**Action:** Prioritize these clients for insurance discussions in your next meetings.`;
   }
 
@@ -73,6 +75,9 @@ function getMockResponse(query: string, data: { clients: any[]; policies: any[];
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireSession(['advisor']);
+    if ('response' in auth) return auth.response;
+
     const { query } = await request.json();
 
     if (!query) {
@@ -94,7 +99,7 @@ export async function POST(request: Request) {
 
     // Format context for Gemini
     const databaseContext = {
-      clients: clients.map((c: any) => ({
+      clients: clients.map((c) => ({
         id: c.id,
         name: `${c.firstName} ${c.lastName}`,
         dob: c.dob,
@@ -105,9 +110,9 @@ export async function POST(request: Request) {
         annualIncome: c.annualIncome,
         riskProfile: c.riskProfile,
         financialGoals: c.financialGoals,
-        family: (c.family || []).map((f: any) => `${f.name} (${f.relation})`),
+        family: c.family.map((f) => `${f.name} (${f.relation})`),
       })),
-      policies: policies.map((p: any) => ({
+      policies: policies.map((p) => ({
         id: p.id,
         clientId: p.clientId,
         company: p.company,
@@ -121,7 +126,7 @@ export async function POST(request: Request) {
         status: p.status,
         renewalStatus: p.renewalStatus,
       })),
-      investments: investments.map((i: any) => ({
+      investments: investments.map((i) => ({
         id: i.id,
         clientId: i.clientId,
         type: i.type,
@@ -167,7 +172,7 @@ Instructions:
     const responseText = result.response.text();
 
     return NextResponse.json({ response: responseText });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Gemini AI execution failed:', error);
     return NextResponse.json(
       { error: 'Failed to process request with AI' },

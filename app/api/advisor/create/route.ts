@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import * as bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
-import { ensureSeeded } from '@/lib/init-db';
-import { saveStoreAdvisor, updateStoreRequestStatus, getStoreAdvisors } from '@/lib/kv-store';
+import { requireSession } from '@/lib/auth';
 
+// Only an already-authenticated advisor may create another advisor account.
 export async function POST(request: Request) {
   try {
-    await ensureSeeded();
+    const auth = await requireSession(['advisor']);
+    if ('response' in auth) return auth.response;
+
     const { email: rawEmail, password } = await request.json();
 
     if (!rawEmail || !password) {
@@ -26,54 +28,39 @@ export async function POST(request: Request) {
     const email = rawEmail.toLowerCase().trim();
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Save to persistent KV store first so authentication works 100%
-    const newAdvisorRecord = {
-      id: `advisor-${Date.now()}`,
-      email,
-      passwordHash: hashedPassword,
-      role: 'advisor' as const,
-      createdAt: new Date().toISOString(),
-    };
-    saveStoreAdvisor(newAdvisorRecord);
+    const existingUser = await prisma.user.findFirst({
+      where: { email: { equals: email } },
+    });
 
-    // Attempt Prisma DB insert/update as well
-    try {
-      const existingUser = await prisma.user.findFirst({
-        where: { email: { equals: email } },
+    if (existingUser) {
+      await prisma.user.update({
+        where: { id: existingUser.id },
+        data: { role: 'advisor', password: hashedPassword },
       });
-
-      if (existingUser) {
-        await prisma.user.update({
-          where: { id: existingUser.id },
-          data: { role: 'advisor', password: hashedPassword },
-        });
-      } else {
-        await prisma.user.create({
-          data: {
-            email,
-            password: hashedPassword,
-            role: 'advisor',
-          },
-        });
-      }
-
-      await prisma.advisorAccessRequest.updateMany({
-        where: { email },
-        data: { status: 'approved' },
+    } else {
+      await prisma.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          role: 'advisor',
+        },
       });
-    } catch (dbErr) {
-      console.warn('Prisma DB write bypassed (handled via KV store):', dbErr);
     }
+
+    await prisma.advisorAccessRequest.updateMany({
+      where: { email },
+      data: { status: 'approved' },
+    });
 
     return NextResponse.json({
       success: true,
       message: `Advisor account successfully created for ${email}`,
       user: { email, role: 'advisor' },
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Failed to create advisor:', error);
     return NextResponse.json(
-      { error: error?.message || 'Failed to create advisor account' },
+      { error: 'Failed to create advisor account' },
       { status: 500 }
     );
   }

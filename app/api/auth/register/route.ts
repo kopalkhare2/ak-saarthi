@@ -110,9 +110,9 @@ export async function POST(request: Request) {
       role: user.role,
       clientId: user.clientId,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Registration error:', error);
-    if (error.code === 'P2002') {
+    if (error instanceof Error && 'code' in error && error.code === 'P2002') {
       return NextResponse.json(
         { error: 'An account with this email already exists' },
         { status: 400 }

@@ -13,8 +13,17 @@ import type { Policy, PolicyType, PolicyStatus } from '@/lib/types';
 import {
   ArrowLeft, Edit, User, CreditCard, Users as UsersIcon,
   Banknote, Shield, TrendingUp, FolderOpen, StickyNote,
-  Phone, Mail, MapPin, Calendar, Briefcase, Plus, Trash2,
+  Phone, Mail, MapPin, Plus, Trash2,
 } from 'lucide-react';
+
+function InfoRow({ label, value }: { label: string; value?: string | number }) {
+  return (
+    <div className="flex justify-between py-2.5 border-b border-slate-800/50">
+      <span className="text-sm text-slate-500">{label}</span>
+      <span className="text-sm font-medium text-slate-200">{value || '—'}</span>
+    </div>
+  );
+}
 
 const tabDefs = [
   { id: 'overview', label: 'Overview', icon: <User size={14} /> },
@@ -174,13 +183,6 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     };
     updateClient(updated);
   };
-
-  const InfoRow = ({ label, value }: { label: string; value?: string | number }) => (
-    <div className="flex justify-between py-2.5 border-b border-slate-800/50">
-      <span className="text-sm text-slate-500">{label}</span>
-      <span className="text-sm font-medium text-slate-200">{value || '—'}</span>
-    </div>
-  );
 
   return (
     <div className="space-y-6">

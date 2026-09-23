@@ -47,7 +47,9 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
     dueDate: '', startDate: '', sumAssured: 0, nominee: '', status: 'active' as PolicyStatus
   });
 
-  // Initialize form state when client is loaded
+  // Initialize form state once the client loads from the (async) app context;
+  // there's no render-time value to compute this from before `client` arrives.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (client) {
       setForm({
@@ -75,6 +77,7 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
       setFamily(client.family || []);
     }
   }, [client]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!client) {
     return (

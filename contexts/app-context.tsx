@@ -71,6 +71,7 @@ interface AppContextType {
 
   // Refresh
   refresh: () => void;
+  isLoading: boolean;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -85,6 +86,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
   const [trashedClients, setTrashedClients] = useState<Client[]>([]);
   const [trashedDocuments, setTrashedDocuments] = useState<ClientDocument[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
@@ -121,10 +123,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setTrashedDocuments(Array.isArray(trashedDocsRes) ? trashedDocsRes : []);
     } catch (error) {
       console.error('Failed to load data from API:', error);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    // One-time data load on mount; refresh() is also called explicitly after
+    // every mutation, so this effect only needs to run once.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
   }, [refresh]);
 
@@ -434,6 +441,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addTask, updateTask, deleteTask,
         addDocument, uploadDocument, deleteDocument, restoreDocument, permanentDeleteDocument,
         refresh: () => { refresh(); },
+        isLoading,
       }}
     >
       {children}

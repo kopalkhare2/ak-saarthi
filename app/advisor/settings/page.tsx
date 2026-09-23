@@ -1,18 +1,33 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useApp } from '@/contexts/app-context';
 import { User, Bell, Database, Save, Download, CheckCircle2, XCircle, Clock, ShieldCheck, Mail, Phone } from 'lucide-react';
 
+interface AdvisorProfile {
+  name: string;
+  email: string;
+  phone: string;
+  company: string;
+  arnNumber: string;
+  licenseNumber: string;
+}
+
+interface AccessRequest {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  status: 'pending' | 'approved' | 'declined';
+  createdAt: string;
+}
+
+const DEFAULT_PROFILE: AdvisorProfile = {
+  name: '', email: '', phone: '', company: '', arnNumber: '', licenseNumber: '',
+};
+
 export default function SettingsPage() {
-  const [profile, setProfile] = useState({
-    name: 'Advisor Kumar',
-    email: 'advisor@aksaarthi.com',
-    phone: '9876543210',
-    company: 'AK Investments & Financial Services',
-    arnNumber: 'ARN-123456',
-    licenseNumber: 'LIC-AGT-789012',
-  });
+  const [profile, setProfile] = useState<AdvisorProfile>(DEFAULT_PROFILE);
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const [notifications, setNotifications] = useState({
     premiumReminders: true,
     renewalAlerts: true,
@@ -20,8 +35,9 @@ export default function SettingsPage() {
     sipReminders: true,
     taskDeadlines: true,
   });
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [accessRequests, setAccessRequests] = useState<any[]>([]);
+  const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState<boolean>(true);
 
   const fetchAccessRequests = async () => {
@@ -39,27 +55,59 @@ export default function SettingsPage() {
     }
   };
 
-  useEffect(() => {
-    const savedProfile = localStorage.getItem('ak_advisor_profile');
-    if (savedProfile) {
-      try {
-        setProfile(JSON.parse(savedProfile));
-      } catch (e) {}
+  const fetchProfile = async () => {
+    try {
+      setLoadingProfile(true);
+      const res = await fetch('/api/advisor/profile');
+      if (res.ok) {
+        const data = await res.json();
+        setProfile({
+          name: data.name || '',
+          email: data.email || '',
+          phone: data.phone || '',
+          company: data.company || '',
+          arnNumber: data.arnNumber || '',
+          licenseNumber: data.licenseNumber || '',
+        });
+      }
+    } catch (e) {
+      console.error('Failed to fetch advisor profile', e);
+    } finally {
+      setLoadingProfile(false);
     }
+  };
+
+  useEffect(() => {
     const savedNotifications = localStorage.getItem('ak_advisor_notifications');
     if (savedNotifications) {
       try {
+        // One-time load of a per-browser preference; localStorage isn't available at render time.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setNotifications(JSON.parse(savedNotifications));
-      } catch (e) {}
+      } catch {
+        // ignore malformed local preferences
+      }
     }
+    fetchProfile();
     fetchAccessRequests();
   }, []);
 
-  const handleSave = () => {
-    localStorage.setItem('ak_advisor_profile', JSON.stringify(profile));
-    localStorage.setItem('ak_advisor_notifications', JSON.stringify(notifications));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await fetch('/api/advisor/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+      });
+      localStorage.setItem('ak_advisor_notifications', JSON.stringify(notifications));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      console.error('Failed to save profile', e);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDownloadBackup = () => {
@@ -69,7 +117,7 @@ export default function SettingsPage() {
     link.click();
   };
 
-  const handleApproveRequest = async (reqId: string, reqEmail: string, reqName: string) => {
+  const handleApproveRequest = async (reqId: string, reqEmail: string) => {
     const targetEmail = prompt('Confirm Email for new Advisor account:', reqEmail || '');
     if (!targetEmail) return;
 
@@ -97,7 +145,7 @@ export default function SettingsPage() {
 
       fetchAccessRequests();
       alert(`✅ Advisor account created for ${targetEmail}!\nTemporary Password: ${tempPassword}`);
-    } catch (err) {
+    } catch {
       alert('Failed to process approval.');
     }
   };
@@ -112,7 +160,7 @@ export default function SettingsPage() {
         body: JSON.stringify({ id: reqId, status: 'declined' }),
       });
       fetchAccessRequests();
-    } catch (err) {
+    } catch {
       alert('Failed to decline request.');
     }
   };
@@ -134,32 +182,32 @@ export default function SettingsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="label">Full Name</label>
-            <input className="input" value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
+            <input className="input" disabled={loadingProfile} value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
           </div>
           <div>
             <label className="label">Email</label>
-            <input className="input" type="email" value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} />
+            <input className="input" type="email" disabled={loadingProfile} value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} />
           </div>
           <div>
             <label className="label">Phone</label>
-            <input className="input" value={profile.phone} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} />
+            <input className="input" disabled={loadingProfile} value={profile.phone} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} />
           </div>
           <div>
             <label className="label">Company</label>
-            <input className="input" value={profile.company} onChange={(e) => setProfile({ ...profile, company: e.target.value })} />
+            <input className="input" disabled={loadingProfile} value={profile.company} onChange={(e) => setProfile({ ...profile, company: e.target.value })} />
           </div>
           <div>
             <label className="label">ARN Number</label>
-            <input className="input" value={profile.arnNumber} onChange={(e) => setProfile({ ...profile, arnNumber: e.target.value })} />
+            <input className="input" disabled={loadingProfile} value={profile.arnNumber} onChange={(e) => setProfile({ ...profile, arnNumber: e.target.value })} />
           </div>
           <div>
             <label className="label">License Number</label>
-            <input className="input" value={profile.licenseNumber} onChange={(e) => setProfile({ ...profile, licenseNumber: e.target.value })} />
+            <input className="input" disabled={loadingProfile} value={profile.licenseNumber} onChange={(e) => setProfile({ ...profile, licenseNumber: e.target.value })} />
           </div>
         </div>
         <div className="flex justify-end mt-4">
-          <button onClick={handleSave} className="btn btn-primary">
-            <Save size={16} /> {saved ? 'Saved ✓' : 'Save Profile'}
+          <button onClick={handleSave} disabled={loadingProfile || saving} className="btn btn-primary disabled:opacity-50">
+            <Save size={16} /> {saved ? 'Saved ✓' : saving ? 'Saving...' : 'Save Profile'}
           </button>
         </div>
       </div>
@@ -206,7 +254,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button
-                      onClick={() => handleApproveRequest(req.id, req.email, req.name)}
+                      onClick={() => handleApproveRequest(req.id, req.email)}
                       className="btn btn-primary text-xs py-1.5 px-3"
                     >
                       <CheckCircle2 size={14} /> Approve & Grant
@@ -252,7 +300,7 @@ export default function SettingsPage() {
                 emailInput.value = '';
                 passInput.value = '';
               }
-            } catch (err) {
+            } catch {
               msgEl.innerText = '❌ Network request failed';
               msgEl.className = 'text-xs text-red-400 font-medium mt-2';
             }
@@ -314,7 +362,7 @@ export default function SettingsPage() {
                 msgEl.className = 'text-xs text-emerald-400 mt-2';
                 formEl.reset();
               }
-            } catch (err) {
+            } catch {
               msgEl.innerText = '❌ Request failed';
               msgEl.className = 'text-xs text-red-400 mt-2';
             }

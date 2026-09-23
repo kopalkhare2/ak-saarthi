@@ -4,13 +4,65 @@ import { useState } from 'react';
 import { useApp } from '@/contexts/app-context';
 import Badge, { taskPriorityBadge } from '@/components/ui/badge';
 import Modal from '@/components/ui/modal';
-import EmptyState from '@/components/ui/empty-state';
 import { generateId, getFullName, formatDate } from '@/lib/utils';
 import type { Task, TaskPriority, TaskStatus } from '@/lib/types';
-import { CheckSquare, Plus, Circle, Clock, CheckCircle, Filter } from 'lucide-react';
+import { Plus, Circle, Clock, CheckCircle } from 'lucide-react';
+
+function statusIcon(status: string) {
+  if (status === 'done') return <CheckCircle size={16} className="text-emerald-400" />;
+  if (status === 'in_progress') return <Clock size={16} className="text-amber-400" />;
+  return <Circle size={16} className="text-slate-500" />;
+}
+
+function Column({
+  title,
+  items,
+  status,
+  onCycle,
+}: {
+  title: string;
+  items: Task[];
+  status: string;
+  onCycle: (task: Task) => void;
+}) {
+  return (
+    <div className="card p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold flex items-center gap-2">
+          {statusIcon(status)} {title}
+        </h3>
+        <Badge label={items.length.toString()} variant="neutral" dot={false} />
+      </div>
+      <div className="space-y-2">
+        {items.map((t) => (
+          <div
+            key={t.id}
+            className="p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors cursor-pointer group"
+            onClick={() => onCycle(t)}
+          >
+            <div className="flex items-start gap-2">
+              <div className="mt-0.5">{statusIcon(t.status)}</div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-medium ${t.status === 'done' ? 'line-through text-slate-500' : ''}`}>{t.title}</p>
+                {t.clientName && <p className="text-xs text-slate-500 mt-0.5">{t.clientName}</p>}
+                <div className="flex items-center gap-2 mt-2">
+                  {taskPriorityBadge(t.priority)}
+                  {t.dueDate && <span className="text-xs text-slate-500">{formatDate(t.dueDate)}</span>}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+        {items.length === 0 && (
+          <p className="text-xs text-slate-500 text-center py-6">No tasks</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function TasksPage() {
-  const { clients, tasks, addTask, updateTask, deleteTask } = useApp();
+  const { clients, tasks, addTask, updateTask } = useApp();
   const [filter, setFilter] = useState<string>('all');
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ title: '', description: '', clientId: '', priority: 'medium' as TaskPriority, dueDate: '' });
@@ -48,47 +100,6 @@ export default function TasksPage() {
     setForm({ title: '', description: '', clientId: '', priority: 'medium', dueDate: '' });
   };
 
-  const statusIcon = (status: string) => {
-    if (status === 'done') return <CheckCircle size={16} className="text-emerald-400" />;
-    if (status === 'in_progress') return <Clock size={16} className="text-amber-400" />;
-    return <Circle size={16} className="text-slate-500" />;
-  };
-
-  const Column = ({ title, items, status }: { title: string; items: Task[]; status: string }) => (
-    <div className="card p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold flex items-center gap-2">
-          {statusIcon(status)} {title}
-        </h3>
-        <Badge label={items.length.toString()} variant="neutral" dot={false} />
-      </div>
-      <div className="space-y-2">
-        {items.map((t) => (
-          <div
-            key={t.id}
-            className="p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors cursor-pointer group"
-            onClick={() => cycleStatus(t)}
-          >
-            <div className="flex items-start gap-2">
-              <div className="mt-0.5">{statusIcon(t.status)}</div>
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium ${t.status === 'done' ? 'line-through text-slate-500' : ''}`}>{t.title}</p>
-                {t.clientName && <p className="text-xs text-slate-500 mt-0.5">{t.clientName}</p>}
-                <div className="flex items-center gap-2 mt-2">
-                  {taskPriorityBadge(t.priority)}
-                  {t.dueDate && <span className="text-xs text-slate-500">{formatDate(t.dueDate)}</span>}
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-        {items.length === 0 && (
-          <p className="text-xs text-slate-500 text-center py-6">No tasks</p>
-        )}
-      </div>
-    </div>
-  );
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -108,9 +119,9 @@ export default function TasksPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 animate-fade-in">
-        <Column title="To Do" items={grouped.todo} status="todo" />
-        <Column title="In Progress" items={grouped.in_progress} status="in_progress" />
-        <Column title="Done" items={grouped.done} status="done" />
+        <Column title="To Do" items={grouped.todo} status="todo" onCycle={cycleStatus} />
+        <Column title="In Progress" items={grouped.in_progress} status="in_progress" onCycle={cycleStatus} />
+        <Column title="Done" items={grouped.done} status="done" onCycle={cycleStatus} />
       </div>
 
       <Modal isOpen={showAdd} onClose={() => setShowAdd(false)} title="Add Task" size="md">

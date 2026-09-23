@@ -59,7 +59,7 @@ export default function CommissionsPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="month" stroke="#64748b" fontSize={12} />
                 <YAxis stroke="#64748b" fontSize={12} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#f8fafc' }} formatter={(v: any) => [`₹${Number(v).toLocaleString('en-IN')}`, 'Commission']} />
+                <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#f8fafc' }} formatter={(v: unknown) => [`₹${Number(v).toLocaleString('en-IN')}`, 'Commission']} />
                 <Line type="monotone" dataKey="total" stroke="#facc15" strokeWidth={2.5} dot={{ fill: '#facc15', r: 4 }} />
               </LineChart>
             </ResponsiveContainer>

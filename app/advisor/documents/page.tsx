@@ -8,7 +8,7 @@ import EmptyState from '@/components/ui/empty-state';
 import { formatDate } from '@/lib/utils';
 import {
   FolderOpen, Search, Upload, FileText, Download, Trash2,
-  RotateCcw, AlertTriangle, X, File, Image, FileSpreadsheet,
+  RotateCcw, AlertTriangle, X, File, Image as ImageIcon, FileSpreadsheet,
   CheckCircle, XCircle,
 } from 'lucide-react';
 
@@ -19,7 +19,7 @@ const typeLabels: Record<string, string> = {
 
 function getFileIcon(mimeType?: string | null) {
   if (!mimeType) return <FileText size={18} className="text-slate-500" />;
-  if (mimeType.startsWith('image/')) return <Image size={18} className="text-blue-400" />;
+  if (mimeType.startsWith('image/')) return <ImageIcon size={18} className="text-blue-400" />;
   if (mimeType.includes('pdf')) return <FileText size={18} className="text-red-400" />;
   if (mimeType.includes('spreadsheet') || mimeType.includes('excel'))
     return <FileSpreadsheet size={18} className="text-emerald-400" />;
@@ -113,8 +113,8 @@ export default function DocumentsPage() {
         setShowUpload(false);
         resetUploadForm();
       }, 1500);
-    } catch (err: any) {
-      setUploadError(err.message || 'Upload failed. Please try again.');
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
     } finally {
       setUploading(false);
     }

@@ -95,7 +95,7 @@ export default function AnalyticsPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="month" stroke="#64748b" fontSize={12} />
                 <YAxis stroke="#64748b" fontSize={12} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => [`₹${Number(v).toLocaleString('en-IN')}`, 'Revenue']} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v: unknown) => [`₹${Number(v).toLocaleString('en-IN')}`, 'Revenue']} />
                 <Line type="monotone" dataKey="revenue" stroke="#facc15" strokeWidth={2.5} dot={{ fill: '#facc15', r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
@@ -111,7 +111,7 @@ export default function AnalyticsPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="month" stroke="#64748b" fontSize={12} />
                 <YAxis stroke="#64748b" fontSize={12} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => [formatCurrency(Number(v)), 'Premium']} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v: unknown) => [formatCurrency(Number(v)), 'Premium']} />
                 <Area type="monotone" dataKey="premium" stroke="#22c55e" fill="#22c55e" fillOpacity={0.15} strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
@@ -146,7 +146,7 @@ export default function AnalyticsPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis type="number" stroke="#64748b" fontSize={12} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
                 <YAxis dataKey="name" type="category" stroke="#64748b" fontSize={11} width={100} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => [formatCurrency(Number(v)), 'Premium']} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v: unknown) => [formatCurrency(Number(v)), 'Premium']} />
                 <Bar dataKey="premium" fill="#a855f7" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>

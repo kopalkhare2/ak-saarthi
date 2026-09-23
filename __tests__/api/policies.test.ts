@@ -12,6 +12,7 @@ import {
   mockPrismaModule,
   createCookiesMock,
   clearMockCookies,
+  setAdvisorSession,
 } from '../helpers/setup';
 
 jest.mock('@/lib/prisma', () => mockPrismaModule());
@@ -30,6 +31,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await clearDatabase();
   clearMockCookies();
+  setAdvisorSession();
 });
 
 describe('GET /api/policies', () => {

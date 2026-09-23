@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useApp } from '@/contexts/app-context';
-import { getFullName, formatDate, daysFromNow } from '@/lib/utils';
-import { Search, Bell, Plus, User, LogOut, ChevronDown, AlertTriangle, Calendar, ShieldAlert, Check } from 'lucide-react';
+import { getFullName, daysFromNow } from '@/lib/utils';
+import { Search, Bell, Plus, User, LogOut, ChevronDown, Calendar, ShieldAlert } from 'lucide-react';
 
 interface NotificationItem {
   id: string;
@@ -14,15 +15,47 @@ interface NotificationItem {
   link: string;
 }
 
+interface AdvisorIdentity {
+  name: string;
+  email: string;
+}
+
 export default function Topbar() {
+  const router = useRouter();
   const { clients, policies, appointments } = useApp();
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [identity, setIdentity] = useState<AdvisorIdentity>({ name: 'Advisor', email: '' });
 
-  // Compute dynamic notifications from DB
   useEffect(() => {
+    let active = true;
+
+    (async () => {
+      try {
+        const [meRes, profileRes] = await Promise.all([
+          fetch('/api/auth/me'),
+          fetch('/api/advisor/profile'),
+        ]);
+        const me = meRes.ok ? await meRes.json() : null;
+        const profile = profileRes.ok ? await profileRes.json() : null;
+        if (!active) return;
+        setIdentity({
+          name: profile?.name || 'Advisor',
+          email: me?.user?.email || profile?.email || '',
+        });
+      } catch {
+        // Keep the fallback identity — this is cosmetic, not a security boundary.
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Derived from existing app-context data — no separate fetch/effect needed.
+  const notifications: NotificationItem[] = useMemo(() => {
     const list: NotificationItem[] = [];
 
     // 1. Policies due in next 30 days
@@ -30,7 +63,7 @@ export default function Topbar() {
       const days = daysFromNow(p.dueDate);
       const client = clients.find((c) => c.id === p.clientId);
       const clientName = client ? getFullName(client.firstName, client.lastName) : 'Client';
-      
+
       if (p.status === 'lapsed') {
         list.push({
           id: `notif-lapse-${p.id}`,
@@ -66,7 +99,7 @@ export default function Topbar() {
       }
     });
 
-    setNotifications(list);
+    return list;
   }, [policies, clients, appointments]);
 
   const toggleNotifications = () => {
@@ -74,6 +107,22 @@ export default function Topbar() {
     setShowQuickAdd(false);
     setShowProfile(false);
   };
+
+  const handleSignOut = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } finally {
+      router.push('/login');
+    }
+  };
+
+  const initials = identity.name
+    .split(' ')
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase() || 'A';
 
   return (
     <header className="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-[var(--navy-950)]/80 backdrop-blur-sm sticky top-0 z-30 no-print">
@@ -115,7 +164,7 @@ export default function Topbar() {
 
         {/* Notifications */}
         <div className="relative">
-          <button 
+          <button
             onClick={toggleNotifications}
             className="relative p-2 rounded-lg hover:bg-slate-800 transition-colors"
           >
@@ -135,7 +184,7 @@ export default function Topbar() {
                   <span className="text-[10px] text-slate-500">{notifications.length} pending</span>
                 )}
               </div>
-              
+
               {notifications.length === 0 ? (
                 <p className="text-xs text-slate-500 py-6 text-center">No new notifications</p>
               ) : (
@@ -175,22 +224,22 @@ export default function Topbar() {
             className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
           >
             <div className="w-8 h-8 rounded-full gradient-gold flex items-center justify-center text-sm font-bold text-slate-900">
-              AK
+              {initials}
             </div>
             <ChevronDown size={14} className="text-slate-500" />
           </button>
           {showProfile && (
             <div className="absolute right-0 mt-2 w-56 card p-3 animate-fade-in z-50">
               <div className="mb-3 pb-3 border-b border-slate-800">
-                <p className="text-sm font-semibold">Advisor Kumar</p>
-                <p className="text-xs text-slate-500">advisor@aksaarthi.com</p>
+                <p className="text-sm font-semibold">{identity.name}</p>
+                <p className="text-xs text-slate-500">{identity.email}</p>
               </div>
               <Link href="/advisor/settings" className="sidebar-link text-sm py-2" onClick={() => setShowProfile(false)}>
                 <User size={16} /> Profile & Settings
               </Link>
-              <Link href="/" className="sidebar-link text-sm text-red-400 hover:text-red-300 py-2" onClick={() => setShowProfile(false)}>
+              <button onClick={handleSignOut} className="sidebar-link text-sm text-red-400 hover:text-red-300 py-2 w-full text-left">
                 <LogOut size={16} /> Sign Out
-              </Link>
+              </button>
             </div>
           )}
         </div>

@@ -12,6 +12,7 @@ import {
   mockPrismaModule,
   createCookiesMock,
   clearMockCookies,
+  setAdvisorSession,
 } from '../helpers/setup';
 
 jest.mock('@/lib/prisma', () => mockPrismaModule());
@@ -30,11 +31,13 @@ afterAll(async () => {
 beforeEach(async () => {
   await clearDatabase();
   clearMockCookies();
+  setAdvisorSession();
 });
 
 describe('GET /api/documents', () => {
   it('should return an empty array when no documents exist', async () => {
-    const res = await getDocuments();
+    const req = createMockRequest('/api/documents');
+    const res = await getDocuments(req);
     const data = await res.json();
 
     expect(res.status).toBe(200);
@@ -46,7 +49,8 @@ describe('GET /api/documents', () => {
     await createTestDocument(client.id, { name: 'PAN Card', fileName: 'pan.pdf' });
     await createTestDocument(client.id, { name: 'Aadhaar', fileName: 'aadhaar.pdf', type: 'aadhaar' });
 
-    const res = await getDocuments();
+    const req = createMockRequest('/api/documents');
+    const res = await getDocuments(req);
     const data = await res.json();
 
     expect(res.status).toBe(200);

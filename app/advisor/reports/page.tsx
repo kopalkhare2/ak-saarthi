@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { getFullName, formatCurrency } from '@/lib/utils';
-import { FileText, Download, Eye, BarChart, Shield, Wallet, DollarSign } from 'lucide-react';
+import { Download, Eye, BarChart, Shield, Wallet, DollarSign } from 'lucide-react';
 
 const reportTypes = [
   { id: 'portfolio', label: 'Portfolio Report', icon: <Wallet size={20} />, description: 'Comprehensive investment and insurance overview for a client' },

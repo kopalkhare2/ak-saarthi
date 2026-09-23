@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireSession } from '@/lib/auth';
 
 export async function GET() {
   try {
+    const auth = await requireSession(['advisor']);
+    if ('response' in auth) return auth.response;
+
     const commissions = await prisma.commission.findMany({
       orderBy: {
         createdAt: 'desc',
@@ -17,6 +21,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireSession(['advisor']);
+    if ('response' in auth) return auth.response;
+
     const body = await request.json();
     const newCommission = await prisma.commission.create({
       data: {

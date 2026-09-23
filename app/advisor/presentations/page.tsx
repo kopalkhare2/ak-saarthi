@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { formatCurrency, getFullName } from '@/lib/utils';
-import Badge from '@/components/ui/badge';
 import { Calculator, Sparkles, Send, Copy, Printer, Check, ShieldAlert, Heart, FileText } from 'lucide-react';
 
 interface ProjectionRow {
@@ -120,10 +119,12 @@ export default function PresentationPage() {
   const [policyTerm, setPolicyTerm] = useState(21); // Default for Jeevan Labh 21/15
   const [ppt, setPpt] = useState(15); // Premium Paying Term
   
-  const [projections, setProjections] = useState<ProjectionRow[]>([]);
   const [copied, setCopied] = useState(false);
 
-  // Sync client selections
+  // Sync client selections. clientName/clientAge stay independent state (rather
+  // than being derived directly) because the fields below also accept manual
+  // overrides that aren't tied to any client record.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (selectedClientId) {
       const c = clients.find((client) => client.id === selectedClientId);
@@ -135,7 +136,9 @@ export default function PresentationPage() {
     }
   }, [selectedClientId, clients]);
 
-  // Adjust default PPT based on selected LIC product
+  // Adjust default PPT based on selected LIC product. policyTerm/ppt are also
+  // directly editable below, so this normalizes them into a valid combination
+  // whenever the product changes rather than being purely derived.
   useEffect(() => {
     if (selectedProduct === '936') {
       if (policyTerm === 16) setPpt(10);
@@ -152,13 +155,11 @@ export default function PresentationPage() {
       setPpt(policyTerm);
     }
   }, [selectedProduct, policyTerm, clientAge, ppt]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-  // Projections Engine
-  useEffect(() => {
-    calculateProjections();
-  }, [selectedProduct, productType, sumAssured, policyTerm, ppt, clientAge]);
-
-  const calculateProjections = () => {
+  // Projections Engine — a pure function of the inputs below, so it's a
+  // memoized derived value rather than separate state kept in sync via an effect.
+  const projections = useMemo<ProjectionRow[]>(() => {
     const rows: ProjectionRow[] = [];
     let cumulativePremium = 0;
     
@@ -195,7 +196,7 @@ export default function PresentationPage() {
         const currentPremium = isPaying ? annualPremium : 0;
         cumulativePremium += currentPremium;
         
-        let bonusAccrued = annualBonus * yr;
+        const bonusAccrued = annualBonus * yr;
         let survivalBenefit = 0;
         let maturityValue = 0;
         
@@ -295,8 +296,8 @@ export default function PresentationPage() {
       }
     }
     
-    setProjections(rows);
-  };
+    return rows;
+  }, [selectedProduct, productType, sumAssured, policyTerm, ppt, clientAge]);
 
   const getWhatsAppText = () => {
     let text = `*AK Investments & Financial Services*\n*Plan Presentation for ${clientName} (Age: ${clientAge})*\n\n`;

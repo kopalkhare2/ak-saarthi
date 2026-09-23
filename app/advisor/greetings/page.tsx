@@ -3,23 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { getFullName, formatDate, formatPhoneForWhatsapp } from '@/lib/utils';
-import { Sparkles, Calendar, Gift, Heart, Printer, Share2, Phone, Mail, Award, Check, Send, Image as ImageIcon } from 'lucide-react';
-
-interface GreetingTemplate {
-  id: string;
-  name: string;
-  themeClass: string;
-  bgGradient: string;
-  textColor: string;
-  accentColor: string;
-}
-
-const templates: GreetingTemplate[] = [
-  { id: 'gold', name: 'Royal Gold & Navy', themeClass: 'border-amber-500/30', bgGradient: 'from-slate-950 via-slate-900 to-slate-950 border border-amber-500/20', textColor: 'text-amber-100', accentColor: 'text-amber-400' },
-  { id: 'ruby', name: 'Festive Red & Gold', themeClass: 'border-red-500/30', bgGradient: 'from-red-950 via-rose-900 to-red-950 border border-amber-500/20', textColor: 'text-rose-100', accentColor: 'text-amber-400' },
-  { id: 'emerald', name: 'Elegant Green & Gold', themeClass: 'border-emerald-500/30', bgGradient: 'from-emerald-950 via-teal-900 to-emerald-950 border border-amber-500/20', textColor: 'text-teal-100', accentColor: 'text-amber-400' },
-  { id: 'sapphire', name: 'Premium Blue & Gold', themeClass: 'border-blue-500/30', bgGradient: 'from-slate-900 via-blue-950 to-slate-900 border border-amber-500/20', textColor: 'text-blue-100', accentColor: 'text-amber-400' },
-];
+import { Sparkles, Calendar, Gift, Heart, Printer, Share2, Phone, Mail, Check, Send } from 'lucide-react';
 
 const festivals = [
   { id: 'diwali', name: 'Diwali (दीपावली)', wish: 'Wishing you a bright, prosperous and secure Diwali! May Goddess Lakshmi bless your home with health, wealth and joy.', hindiWish: 'आपको एवं आपके परिवार को दीपावली की हार्दिक शुभकामनाएं! माँ लक्ष्मी आपकी वित्तीय सुरक्षा और समृद्धि का मार्ग प्रशस्त करें।' },
@@ -42,7 +26,6 @@ export default function GreetingsPage() {
   const [postType, setPostType] = useState<'birthday' | 'anniversary' | 'festival' | 'marketing'>('birthday');
   const [selectedFestival, setSelectedFestival] = useState<string>('diwali');
   const [selectedMarketing, setSelectedMarketing] = useState<string>('sip');
-  const [activeTemplate, setActiveTemplate] = useState<string>('gold');
   const [customMsg, setCustomMsg] = useState<string>('');
   const [useHindi, setUseHindi] = useState(false);
   const [showIllustration, setShowIllustration] = useState(true);
@@ -54,29 +37,35 @@ export default function GreetingsPage() {
   const [aiLang, setAiLang] = useState<'en' | 'hi' | 'hinglish'>('en');
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Advisor co-branding profile (loaded from localStorage or default)
+  // Advisor co-branding profile (loaded from the advisor's saved profile)
   const [advisorProfile, setAdvisorProfile] = useState({
-    name: 'Advisor Kumar',
+    name: 'Advisor',
     company: 'AK Investments & Financial Services',
-    phone: '9876543210',
+    phone: '',
     email: 'advisor@aksaarthi.com',
-    license: 'ARN-123456 | LIC-AGT-789012',
+    license: '',
   });
 
   useEffect(() => {
-    const savedProfile = localStorage.getItem('ak_advisor_profile');
-    if (savedProfile) {
+    let active = true;
+    (async () => {
       try {
-        const parsed = JSON.parse(savedProfile);
+        const res = await fetch('/api/advisor/profile');
+        if (!res.ok || !active) return;
+        const data = await res.json();
+        if (!active) return;
         setAdvisorProfile({
-          name: parsed.name || 'Advisor Kumar',
-          company: parsed.company || 'AK Investments & Financial Services',
-          phone: parsed.phone || '9876543210',
-          email: parsed.email || 'advisor@aksaarthi.com',
-          license: `${parsed.arnNumber || 'ARN-123456'} | ${parsed.licenseNumber || 'LIC-AGT-789012'}`,
+          name: data.name || 'Advisor',
+          company: data.company || 'AK Investments & Financial Services',
+          phone: data.phone || '',
+          email: data.email || 'advisor@aksaarthi.com',
+          license: [data.arnNumber, data.licenseNumber].filter(Boolean).join(' | '),
         });
-      } catch (e) {}
-    }
+      } catch {
+        // Keep defaults — this only affects greeting co-branding text.
+      }
+    })();
+    return () => { active = false; };
   }, []);
 
   const client = clients.find((c) => c.id === selectedClient) || clients[0];
@@ -590,7 +579,7 @@ export default function GreetingsPage() {
                   <select 
                     className="input text-[11px] h-8 py-0.5 px-2 mt-1" 
                     value={aiLang} 
-                    onChange={(e) => setAiLang(e.target.value as any)}
+                    onChange={(e) => setAiLang(e.target.value as 'en' | 'hi' | 'hinglish')}
                   >
                     <option value="en">English</option>
                     <option value="hi">Hindi (हिंदी)</option>
@@ -602,7 +591,7 @@ export default function GreetingsPage() {
                   <select 
                     className="input text-[11px] h-8 py-0.5 px-2 mt-1" 
                     value={aiTone} 
-                    onChange={(e) => setAiTone(e.target.value as any)}
+                    onChange={(e) => setAiTone(e.target.value as 'warm' | 'formal' | 'religious' | 'financial' | 'poetic')}
                   >
                     <option value="warm">Warm / Emotional</option>
                     <option value="formal">Formal / Business</option>
@@ -743,7 +732,7 @@ export default function GreetingsPage() {
         <div className="lg:col-span-7 flex flex-col items-center">
           <div className="text-center mb-3 no-print">
             <p className="text-xs text-slate-500 uppercase tracking-widest font-bold">Live Poster Canvas Preview</p>
-            <p className="text-[10px] text-slate-600 mt-0.5">Use "Print / Save PDF" to download this card as an image/PDF.</p>
+            <p className="text-[10px] text-slate-600 mt-0.5">Use &quot;Print / Save PDF&quot; to download this card as an image/PDF.</p>
           </div>
 
           {/* Standard Greeting Card Canvas */}
