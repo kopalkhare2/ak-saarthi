@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireSession } from '@/lib/auth';
 import fs from 'fs';
 import path from 'path';
+import { getAuthSession, isAdmin } from '@/lib/auth';
 
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireSession(['advisor']);
-    if ('response' in auth) return auth.response;
+    const session = await getAuthSession();
+    if (!session || session.role !== 'advisor') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const { id } = await params;
 
@@ -21,6 +23,10 @@ export async function DELETE(
 
     if (!client) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+    }
+
+    if (!isAdmin(session.email) && client.advisorId !== session.userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     if (!client.isDeleted) {

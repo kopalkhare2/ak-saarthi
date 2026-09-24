@@ -15,12 +15,6 @@ const features = [
   { icon: <Zap size={24} />, title: 'Commission Tracker', description: 'Track earnings by company, type, and month with pending payment alerts.' },
 ];
 
-const stats = [
-  { label: 'Active Advisors', value: '500+' },
-  { label: 'Policies Managed', value: '10K+' },
-  { label: 'AUM Tracked', value: '₹100 Cr+' },
-  { label: 'Client Satisfaction', value: '99%' },
-];
 
 export default function Home() {
   return (
@@ -62,7 +56,7 @@ export default function Home() {
                 href="/advisor/dashboard"
                 className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-500 px-8 py-3.5 text-slate-900 font-bold text-lg transition-all hover:shadow-[0_4px_24px_rgba(250,204,21,0.3)] hover:-translate-y-0.5"
               >
-                Advisor Dashboard
+                Advisor Portal
                 <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
               </Link>
 
@@ -73,20 +67,6 @@ export default function Home() {
                 Client Portal
               </Link>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Bar */}
-      <section className="border-y border-slate-800 bg-slate-900/50 backdrop-blur">
-        <div className="max-w-6xl mx-auto px-6 py-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-            {stats.map((s) => (
-              <div key={s.label}>
-                <p className="text-2xl md:text-3xl font-bold text-yellow-400">{s.value}</p>
-                <p className="text-sm text-slate-400 mt-1">{s.label}</p>
-              </div>
-            ))}
           </div>
         </div>
       </section>

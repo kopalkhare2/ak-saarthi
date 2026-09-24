@@ -1,19 +1,28 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireSession } from '@/lib/auth';
-import type { Prisma } from '@prisma/client';
+import { getAuthSession, isAdmin } from '@/lib/auth';
 
 export async function GET() {
   try {
-    const auth = await requireSession();
-    if ('response' in auth) return auth.response;
-    const { session } = auth;
+    const session = await getAuthSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    const where: Prisma.AppointmentWhereInput =
-      session.role === 'client' ? { clientId: session.clientId ?? '__none__' } : {};
+    const whereClause: any = {};
+    if (session.role === 'advisor') {
+      if (!isAdmin(session.email)) {
+        whereClause.OR = [
+          { advisorId: session.userId },
+          { client: { advisorId: session.userId } }
+        ];
+      }
+    } else if (session.role === 'client') {
+      whereClause.clientId = session.clientId;
+    }
 
     const appointments = await prisma.appointment.findMany({
-      where,
+      where: whereClause,
       orderBy: {
         date: 'asc',
       },
@@ -27,10 +36,23 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireSession(['advisor']);
-    if ('response' in auth) return auth.response;
+    const session = await getAuthSession();
+    if (!session || session.role !== 'advisor') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const body = await request.json();
+
+    // Verify advisor owns the client if clientId is provided
+    if (body.clientId && !isAdmin(session.email)) {
+      const client = await prisma.client.findFirst({
+        where: { id: body.clientId, advisorId: session.userId }
+      });
+      if (!client) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
     const newAppointment = await prisma.appointment.create({
       data: {
         clientId: body.clientId || null,
@@ -43,6 +65,7 @@ export async function POST(request: Request) {
         location: body.location || null,
         notes: body.notes || null,
         status: body.status || 'scheduled',
+        advisorId: session.userId,
       },
     });
     return NextResponse.json(newAppointment);
@@ -51,3 +74,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to create appointment' }, { status: 500 });
   }
 }
+

@@ -1,33 +1,46 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireSession } from '@/lib/auth';
-import type { Prisma } from '@prisma/client';
+import { getAuthSession, isAdmin } from '@/lib/auth';
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireSession();
-    if ('response' in auth) return auth.response;
-    const { session } = auth;
-
-    const { id } = await params;
-
-    if (session.role === 'client' && session.clientId !== id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const session = await getAuthSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { id } = await params;
     const client = await prisma.client.findUnique({
       where: { id },
       include: {
         family: true,
-        notes: { orderBy: { createdAt: 'desc' } },
+        advisor: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+          }
+        }
       },
     });
 
     if (!client) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+    }
+
+    if (session.role === 'advisor') {
+      if (!isAdmin(session.email) && client.advisorId !== session.userId) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    } else if (session.role === 'client') {
+      if (session.clientId !== client.id) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
     }
 
     return NextResponse.json(client);
@@ -37,58 +50,55 @@ export async function GET(
   }
 }
 
-interface FamilyMemberInput {
-  name: string;
-  relation: string;
-  dob?: string;
-  phone?: string;
-}
-
-interface NoteInput {
-  content: string;
-}
-
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireSession(['advisor']);
-    if ('response' in auth) return auth.response;
+    const session = await getAuthSession();
+    if (!session || session.role !== 'advisor') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const { id } = await params;
+    const client = await prisma.client.findUnique({
+      where: { id },
+    });
+
+    if (!client) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+    }
+
+    if (!isAdmin(session.email) && client.advisorId !== session.userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await request.json();
-    const { family, notes, ...clientData } = body as Omit<Prisma.ClientUpdateInput, 'family' | 'notes'> & {
-      family?: FamilyMemberInput[];
-      notes?: NoteInput[];
-    };
+    const { family, notes, ...clientData } = body;
 
-    // Use a transaction to update client and recreate family members + notes
-    const updatedClient = await prisma.$transaction(async (tx) => {
-      await tx.familyMember.deleteMany({ where: { clientId: id } });
-      await tx.note.deleteMany({ where: { clientId: id } });
+    // Use a transaction to update client and recreate family members
+    const updatedClient = await prisma.$transaction(async (tx: any) => {
+      // Delete existing family members
+      await tx.familyMember.deleteMany({
+        where: { clientId: id },
+      });
 
-      return tx.client.update({
+      // Update client info and create new family members
+      return await tx.client.update({
         where: { id },
         data: {
           ...clientData,
           family: {
-            create: (family || []).map((member) => ({
+            create: family?.map((member: any) => ({
               name: member.name,
               relation: member.relation,
               dob: member.dob || null,
               phone: member.phone || null,
-            })),
-          },
-          notes: {
-            create: (notes || []).map((note) => ({
-              content: note.content,
-            })),
+            })) || [],
           },
         },
         include: {
           family: true,
-          notes: { orderBy: { createdAt: 'desc' } },
         },
       });
     });
@@ -105,17 +115,24 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireSession(['advisor']);
-    if ('response' in auth) return auth.response;
+    const session = await getAuthSession();
+    if (!session || session.role !== 'advisor') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const { id } = await params;
 
+    // First check if client exists
     const client = await prisma.client.findUnique({
       where: { id },
     });
 
     if (!client) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+    }
+
+    if (!isAdmin(session.email) && client.advisorId !== session.userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Soft-delete: mark as deleted, preserve all data
@@ -136,9 +153,17 @@ export async function DELETE(
       },
     });
 
+    // Also delete any User account linked to this client
+    if (client.email) {
+      await prisma.user.deleteMany({
+        where: { email: client.email.toLowerCase().trim() },
+      });
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Failed to delete client:', error);
     return NextResponse.json({ error: 'Failed to delete client' }, { status: 500 });
   }
 }
+

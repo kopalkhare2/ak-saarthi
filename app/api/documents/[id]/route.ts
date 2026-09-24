@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireSession } from '@/lib/auth';
 import fs from 'fs';
 import path from 'path';
+import { getAuthSession, isAdmin } from '@/lib/auth';
 
 // GET: Download the actual file
 export async function GET(
@@ -10,22 +10,30 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireSession();
-    if ('response' in auth) return auth.response;
-    const { session } = auth;
+    const session = await getAuthSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const { id } = await params;
 
     const doc = await prisma.clientDocument.findUnique({
       where: { id },
+      include: { client: true }
     });
 
     if (!doc) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
-    if (session.role === 'client' && doc.clientId !== session.clientId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (session.role === 'advisor') {
+      if (!isAdmin(session.email) && doc.client.advisorId !== session.userId) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    } else if (session.role === 'client') {
+      if (doc.clientId !== session.clientId) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
     }
 
     if (!doc.filePath) {
@@ -63,17 +71,24 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireSession(['advisor']);
-    if ('response' in auth) return auth.response;
+    const session = await getAuthSession();
+    if (!session || session.role !== 'advisor') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const { id } = await params;
 
     const doc = await prisma.clientDocument.findUnique({
       where: { id },
+      include: { client: true }
     });
 
     if (!doc) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+    }
+
+    if (!isAdmin(session.email) && doc.client.advisorId !== session.userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Soft-delete: preserve file on disk, just mark as deleted
@@ -91,3 +106,4 @@ export async function DELETE(
     return NextResponse.json({ error: 'Failed to delete document' }, { status: 500 });
   }
 }
+

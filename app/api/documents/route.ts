@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireSession } from '@/lib/auth';
 import fs from 'fs';
 import path from 'path';
+import { getAuthSession, isAdmin } from '@/lib/auth';
 
 // Max file size: 10 MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -21,29 +21,36 @@ const ALLOWED_MIME_TYPES = [
   'text/plain',
 ];
 
-export async function GET(request: Request) {
+export async function GET(request?: Request) {
   try {
-    const auth = await requireSession();
-    if ('response' in auth) return auth.response;
-    const { session } = auth;
+    const session = await getAuthSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    const { searchParams } = new URL(request.url);
-    const showTrash = searchParams.get('trash') === 'true';
-    const clientId = searchParams.get('clientId');
+    const url = request ? new URL(request.url) : null;
+    const showTrash = url ? url.searchParams.get('trash') === 'true' : false;
+    const clientId = url ? url.searchParams.get('clientId') : null;
 
-    const where: Record<string, unknown> = {
+    const whereClause: any = {
       isDeleted: showTrash,
     };
+    if (clientId) {
+      whereClause.clientId = clientId;
+    }
 
-    if (session.role === 'client') {
-      // Clients can only ever see their own documents, regardless of the query param.
-      where.clientId = session.clientId ?? '__none__';
-    } else if (clientId) {
-      where.clientId = clientId;
+    if (session.role === 'advisor') {
+      if (!isAdmin(session.email)) {
+        whereClause.client = {
+          advisorId: session.userId,
+        };
+      }
+    } else if (session.role === 'client') {
+      whereClause.clientId = session.clientId;
     }
 
     const documents = await prisma.clientDocument.findMany({
-      where,
+      where: whereClause,
       orderBy: {
         uploadedAt: 'desc',
       },
@@ -57,8 +64,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireSession(['advisor']);
-    if ('response' in auth) return auth.response;
+    const session = await getAuthSession();
+    if (!session || session.role !== 'advisor') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const contentType = request.headers.get('content-type') || '';
 
@@ -76,6 +85,16 @@ export async function POST(request: Request) {
           { error: 'Missing required fields: file, clientId, clientName, type, name' },
           { status: 400 }
         );
+      }
+
+      // Verify advisor owns the client
+      if (!isAdmin(session.email)) {
+        const client = await prisma.client.findFirst({
+          where: { id: clientId, advisorId: session.userId }
+        });
+        if (!client) {
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
       }
 
       // Validate file size
@@ -130,6 +149,17 @@ export async function POST(request: Request) {
 
     // Fallback: JSON-only document metadata (no file upload)
     const body = await request.json();
+
+    // Verify advisor owns the client
+    if (!isAdmin(session.email)) {
+      const client = await prisma.client.findFirst({
+        where: { id: body.clientId, advisorId: session.userId }
+      });
+      if (!client) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
     const newDoc = await prisma.clientDocument.create({
       data: {
         clientId: body.clientId,
@@ -146,3 +176,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to create document' }, { status: 500 });
   }
 }
+

@@ -1,37 +1,58 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireSession } from '@/lib/auth';
 import * as bcrypt from 'bcryptjs';
-import type { Prisma } from '@prisma/client';
+import { getAuthSession, isAdmin } from '@/lib/auth';
 
-export async function GET(request: Request) {
+export async function GET(request?: Request) {
   try {
-    const auth = await requireSession();
-    if ('response' in auth) return auth.response;
-    const { session } = auth;
+    const session = await getAuthSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    const { searchParams } = new URL(request.url);
-    const showTrash = searchParams.get('trash') === 'true';
+    const showTrash = request
+      ? new URL(request.url).searchParams.get('trash') === 'true'
+      : false;
 
-    const where: Prisma.ClientWhereInput = { isDeleted: showTrash };
+    const whereClause: any = {
+      isDeleted: showTrash,
+    };
 
-    // Clients may only ever see their own record — never the full roster.
-    if (session.role === 'client') {
-      where.id = session.clientId ?? '__none__';
+    if (session.role === 'advisor') {
+      if (!isAdmin(session.email)) {
+        whereClause.advisorId = session.userId;
+      }
+    } else if (session.role === 'client') {
+      whereClause.id = session.clientId;
     }
 
     const clients = await prisma.client.findMany({
-      where,
+      where: whereClause,
       include: {
         family: true,
-        notes: { orderBy: { createdAt: 'desc' } },
+        advisor: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+          }
+        }
       },
       orderBy: {
         createdAt: 'desc',
       },
     });
+    
+    // Map dates to match original schema and string-based representation
+    const formattedClients = clients.map((client: any) => ({
+      ...client,
+      // Convert database notes (if any) and other properties to match typescript structures
+      notes: [], // API has a separate notes table/handling if needed or simple array
+    }));
 
-    return NextResponse.json(clients);
+    return NextResponse.json(formattedClients);
   } catch (error) {
     console.error('Failed to fetch clients:', error);
     return NextResponse.json({ error: 'Failed to fetch clients' }, { status: 500 });
@@ -40,33 +61,30 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireSession(['advisor']);
-    if ('response' in auth) return auth.response;
+    const session = await getAuthSession();
+    if (!session || session.role !== 'advisor') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const body = await request.json();
-    const { family, notes, ...clientData } = body as Omit<Prisma.ClientCreateInput, 'family' | 'notes'> & {
-      family?: { name: string; relation: string; dob?: string; phone?: string }[];
-      notes?: { content: string }[];
-    };
+    const { family, notes, ...clientData } = body;
 
+    // Create client along with family members
     const newClient = await prisma.client.create({
       data: {
         ...clientData,
+        advisorId: session.userId,
         family: {
-          create: (family || []).map((member) => ({
+          create: family?.map((member: any) => ({
             name: member.name,
             relation: member.relation,
             dob: member.dob || null,
             phone: member.phone || null,
-          })),
-        },
-        notes: {
-          create: (notes || []).map((note) => ({ content: note.content })),
+          })) || [],
         },
       },
       include: {
         family: true,
-        notes: true,
       },
     });
 
@@ -81,17 +99,21 @@ export async function POST(request: Request) {
             password: hashedPassword,
             role: 'client',
             clientId: newClient.id,
+            firstName: newClient.firstName,
+            lastName: newClient.lastName,
+            phone: newClient.phone,
           },
         });
       }
     }
 
     return NextResponse.json(newClient);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to create client:', error);
-    if (error instanceof Error && 'code' in error && error.code === 'P2002') {
+    if (error.code === 'P2002') {
       return NextResponse.json({ error: 'A client with this email already exists' }, { status: 400 });
     }
     return NextResponse.json({ error: 'Failed to create client' }, { status: 500 });
   }
 }
+

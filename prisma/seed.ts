@@ -45,7 +45,7 @@ async function main() {
   const hashedPassword = await bcrypt.hash('password', 10);
 
   // Advisor User
-  await prisma.user.create({
+  const seedAdvisor = await prisma.user.create({
     data: {
       email: 'advisor@aksaarthi.com',
       password: hashedPassword,
@@ -214,10 +214,10 @@ async function main() {
   ];
 
   for (const c of clientsData) {
-    // Create the Client db record
     const client = await prisma.client.create({
       data: {
         id: c.id,
+        advisorId: seedAdvisor.id,
         firstName: c.firstName,
         lastName: c.lastName,
         dob: c.dob,

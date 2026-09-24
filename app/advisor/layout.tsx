@@ -1,44 +1,52 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/ui/sidebar';
 import Topbar from '@/components/ui/topbar';
-import LoadingScreen from '@/components/ui/loading-screen';
-import { AppProvider, useApp } from '@/contexts/app-context';
-
-function AdvisorShell({ children }: { children: React.ReactNode }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const { isLoading } = useApp();
-
-  if (isLoading) {
-    return <LoadingScreen />;
-  }
-
-  return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar collapsed={collapsed} onToggleCollapsed={() => setCollapsed((c) => !c)} />
-      <div
-        className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${
-          collapsed ? 'ml-[68px]' : 'ml-[240px]'
-        }`}
-      >
-        <Topbar />
-        <main className="flex-1 overflow-y-auto p-6 gradient-surface">
-          {children}
-        </main>
-      </div>
-    </div>
-  );
-}
+import { AppProvider } from '@/contexts/app-context';
+import { Sparkles } from 'lucide-react';
 
 export default function AdvisorLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const role = localStorage.getItem('ak_logged_in_role');
+    if (role !== 'advisor') {
+      router.push('/login');
+    } else {
+      setLoading(false);
+    }
+  }, [router]);
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[var(--navy-950)] text-white">
+        <div className="text-center space-y-2 animate-pulse">
+          <Sparkles size={32} className="text-blue-500 mx-auto animate-spin" />
+          <p className="text-sm text-slate-400">Loading portal...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <AppProvider>
-      <AdvisorShell>{children}</AdvisorShell>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden ml-[240px] transition-all duration-300">
+          <Topbar />
+          <main className="flex-1 overflow-y-auto p-6 gradient-surface">
+            {children}
+          </main>
+        </div>
+      </div>
     </AppProvider>
   );
 }
+

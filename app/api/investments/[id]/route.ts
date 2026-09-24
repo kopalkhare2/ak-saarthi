@@ -1,27 +1,35 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireSession } from '@/lib/auth';
+import { getAuthSession, isAdmin } from '@/lib/auth';
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireSession();
-    if ('response' in auth) return auth.response;
-    const { session } = auth;
+    const session = await getAuthSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const { id } = await params;
     const investment = await prisma.investment.findUnique({
       where: { id },
+      include: { client: true }
     });
 
     if (!investment) {
       return NextResponse.json({ error: 'Investment not found' }, { status: 404 });
     }
 
-    if (session.role === 'client' && investment.clientId !== session.clientId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (session.role === 'advisor') {
+      if (!isAdmin(session.email) && investment.client.advisorId !== session.userId) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    } else if (session.role === 'client') {
+      if (investment.clientId !== session.clientId) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
     }
 
     return NextResponse.json(investment);
@@ -36,10 +44,25 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireSession(['advisor']);
-    if ('response' in auth) return auth.response;
+    const session = await getAuthSession();
+    if (!session || session.role !== 'advisor') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const { id } = await params;
+    const investment = await prisma.investment.findUnique({
+      where: { id },
+      include: { client: true }
+    });
+
+    if (!investment) {
+      return NextResponse.json({ error: 'Investment not found' }, { status: 404 });
+    }
+
+    if (!isAdmin(session.email) && investment.client.advisorId !== session.userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await request.json();
 
     const updatedInvestment = await prisma.investment.update({
@@ -72,10 +95,25 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireSession(['advisor']);
-    if ('response' in auth) return auth.response;
+    const session = await getAuthSession();
+    if (!session || session.role !== 'advisor') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const { id } = await params;
+    const investment = await prisma.investment.findUnique({
+      where: { id },
+      include: { client: true }
+    });
+
+    if (!investment) {
+      return NextResponse.json({ error: 'Investment not found' }, { status: 404 });
+    }
+
+    if (!isAdmin(session.email) && investment.client.advisorId !== session.userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     await prisma.investment.delete({
       where: { id },
     });
@@ -85,3 +123,4 @@ export async function DELETE(
     return NextResponse.json({ error: 'Failed to delete investment' }, { status: 500 });
   }
 }
+

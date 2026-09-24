@@ -15,12 +15,18 @@ model User {
   password  String
   role      String   // "advisor" | "client"
   clientId  String?  // If role is "client", links to their Client profile
+  firstName String?
+  lastName  String?
+  phone     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  clients   Client[] @relation("AdvisorClients")
 }
 
 model Client {
   id                  String         @id @default(uuid())
+  advisorId           String?
+  advisor             User?          @relation("AdvisorClients", fields: [advisorId], references: [id])
   firstName           String
   lastName            String
   dob                 String
@@ -135,6 +141,7 @@ model Commission {
 
 model Appointment {
   id         String   @id @default(uuid())
+  advisorId  String?
   clientId   String?
   client     Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
   clientName String?  // Flat name fallback if no client linked
@@ -152,6 +159,7 @@ model Appointment {
 
 model Task {
   id          String   @id @default(uuid())
+  advisorId   String?
   clientId    String?
   client      Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
   clientName  String?

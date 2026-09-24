@@ -9,8 +9,8 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const {
-      firstName, lastName, email, password, phone, dob, gender,
-      address, city, state, pincode, occupation, maritalStatus,
+      firstName, lastName, email, password, phone, role = 'client',
+      dob, gender, address, city, state, pincode, occupation, maritalStatus,
       annualIncome, riskProfile,
     } = body;
 
@@ -29,13 +29,56 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if email already exists (in User or Client table)
+    // Check if email already exists (in User table)
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       return NextResponse.json(
         { error: 'An account with this email already exists' },
         { status: 400 }
       );
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    if (role === 'advisor') {
+      const user = await prisma.user.create({
+        data: {
+          email: email.toLowerCase().trim(),
+          password: hashedPassword,
+          role: 'advisor',
+          firstName,
+          lastName,
+          phone,
+        },
+      });
+
+      const token = jwt.sign(
+        {
+          userId: user.id,
+          email: user.email,
+          role: user.role,
+        },
+        getJwtSecret(),
+        { expiresIn: '7d' }
+      );
+
+      const cookieStore = await cookies();
+      cookieStore.set({
+        name: 'ak_token',
+        value: token,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 60 * 60 * 24 * 7,
+        path: '/',
+      });
+
+      return NextResponse.json({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      });
     }
 
     const existingClient = await prisma.client.findUnique({ where: { email } });
@@ -45,9 +88,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create the Client record
     const client = await prisma.client.create({
@@ -73,10 +113,13 @@ export async function POST(request: Request) {
     // Create the User record linked to the Client
     const user = await prisma.user.create({
       data: {
-        email,
+        email: email.toLowerCase().trim(),
         password: hashedPassword,
         role: 'client',
         clientId: client.id,
+        firstName,
+        lastName,
+        phone,
       },
     });
 

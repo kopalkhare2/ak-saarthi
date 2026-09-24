@@ -1,13 +1,27 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireSession } from '@/lib/auth';
+import { getAuthSession, isAdmin } from '@/lib/auth';
 
 export async function GET() {
   try {
-    const auth = await requireSession(['advisor']);
-    if ('response' in auth) return auth.response;
+    const session = await getAuthSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const whereClause: any = {};
+    if (session.role === 'advisor') {
+      if (!isAdmin(session.email)) {
+        whereClause.client = {
+          advisorId: session.userId,
+        };
+      }
+    } else if (session.role === 'client') {
+      whereClause.clientId = session.clientId;
+    }
 
     const commissions = await prisma.commission.findMany({
+      where: whereClause,
       orderBy: {
         createdAt: 'desc',
       },
@@ -21,10 +35,23 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireSession(['advisor']);
-    if ('response' in auth) return auth.response;
+    const session = await getAuthSession();
+    if (!session || session.role !== 'advisor') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const body = await request.json();
+
+    // Verify advisor owns the client
+    if (!isAdmin(session.email)) {
+      const client = await prisma.client.findFirst({
+        where: { id: body.clientId, advisorId: session.userId }
+      });
+      if (!client) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
     const newCommission = await prisma.commission.create({
       data: {
         clientId: body.clientId,
@@ -43,3 +70,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to create commission' }, { status: 500 });
   }
 }
+

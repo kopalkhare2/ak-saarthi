@@ -130,11 +130,19 @@ export async function ensureSeeded() {
       },
     ];
 
+    const primaryAdvisorId = (await prisma.user.findFirst({ where: { email: 'advisor@aksaarthi.com' } }))?.id || null;
+
     for (const cData of sampleClients) {
       let client = await prisma.client.findFirst({ where: { email: cData.email } });
       if (!client) {
-        client = await prisma.client.create({ data: cData });
+        client = await prisma.client.create({
+          data: {
+            ...cData,
+            ...(primaryAdvisorId ? { advisor: { connect: { id: primaryAdvisorId } } } : {}),
+          },
+        });
       }
+
 
       const clientUser = await prisma.user.findFirst({ where: { email: cData.email } });
       if (!clientUser) {
