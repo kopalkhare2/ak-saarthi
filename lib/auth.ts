@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import * as jwt from 'jsonwebtoken';
+import { NextResponse } from 'next/server';
 
 /**
  * Shared authentication helpers.
@@ -28,21 +29,70 @@ export function getJwtSecret(): string {
   return DEV_FALLBACK;
 }
 
-export async function getAuthSession() {
+export type Role = 'advisor' | 'client';
+
+export interface SessionUser {
+  userId: string;
+  email: string;
+  role: Role;
+  clientId: string | null;
+}
+
+/**
+ * Reads and verifies the ak_token cookie server-side. Returns null if missing,
+ * expired, or tampered with. Every route that returns or mutates data must
+ * call this (or requireSession) — never trust a role/clientId sent by the client.
+ */
+export async function getSession(): Promise<SessionUser | null> {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get('ak_token')?.value;
     if (!token) return null;
 
-    return jwt.verify(token, getJwtSecret()) as {
-      userId: string;
-      email: string;
-      role: string;
-      clientId?: string;
+    const decoded = jwt.verify(token, getJwtSecret()) as Partial<SessionUser>;
+    if (!decoded.userId || !decoded.role) return null;
+
+    return {
+      userId: decoded.userId,
+      email: decoded.email ?? '',
+      role: decoded.role as Role,
+      clientId: decoded.clientId ?? null,
     };
-  } catch (err) {
+  } catch {
     return null;
   }
+}
+
+/**
+ * Alias for getSession for backwards-compatibility
+ */
+export async function getAuthSession() {
+  return getSession();
+}
+
+/**
+ * Guard for API routes. Returns the verified session, or a ready-to-return
+ * NextResponse (401/403) when the caller isn't allowed through.
+ *
+ * Usage:
+ *   const auth = await requireSession(['advisor']);
+ *   if ('response' in auth) return auth.response;
+ *   const { session } = auth;
+ */
+export async function requireSession(
+  allowedRoles?: Role[]
+): Promise<{ session: SessionUser } | { response: NextResponse }> {
+  const session = await getSession();
+
+  if (!session) {
+    return { response: NextResponse.json({ error: 'Unauthorized. Please sign in.' }, { status: 401 }) };
+  }
+
+  if (allowedRoles && !allowedRoles.includes(session.role)) {
+    return { response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
+  }
+
+  return { session };
 }
 
 export function isAdmin(email: string): boolean {

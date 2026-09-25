@@ -92,11 +92,14 @@ function NavSection({
 }
 
 interface SidebarProps {
-  collapsed: boolean;
-  onToggleCollapsed: () => void;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }
 
-export default function Sidebar({ collapsed, onToggleCollapsed }: SidebarProps) {
+export default function Sidebar({
+  collapsed = false,
+  onToggleCollapsed = () => {},
+}: SidebarProps) {
   const pathname = usePathname();
 
   return (

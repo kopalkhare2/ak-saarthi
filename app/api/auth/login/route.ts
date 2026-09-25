@@ -16,7 +16,7 @@ export async function POST(request: Request) {
 
     if (!rawEmail || (!password && !isGoogle)) {
       return NextResponse.json(
-        { error: 'Email is required' },
+        { error: 'Email and password are required' },
         { status: 400 }
       );
     }

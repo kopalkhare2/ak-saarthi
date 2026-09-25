@@ -153,13 +153,6 @@ export async function DELETE(
       },
     });
 
-    // Also delete any User account linked to this client
-    if (client.email) {
-      await prisma.user.deleteMany({
-        where: { email: client.email.toLowerCase().trim() },
-      });
-    }
-
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Failed to delete client:', error);

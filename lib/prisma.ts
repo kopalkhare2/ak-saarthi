@@ -1,41 +1,55 @@
+// lib/prisma.ts — Prisma ORM v7 + Supabase PostgreSQL
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
-import path from 'path';
-import fs from 'fs';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 
-let prisma: PrismaClient;
+let _prisma: PrismaClient | null = null;
 
-let dbPath = path.join(process.cwd(), 'prisma/seed.db');
+function getPrismaClient(): PrismaClient {
+  if (_prisma) return _prisma;
 
-// On Vercel serverless functions, the root directory is read-only.
-// We must copy dev.db to /tmp/dev.db so SQLite write transactions succeed cleanly.
-if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-  const tmpDbPath = '/tmp/dev.db';
-  try {
-    if (!fs.existsSync(tmpDbPath)) {
-      if (fs.existsSync(dbPath)) {
-        fs.copyFileSync(dbPath, tmpDbPath);
-      }
+  const connectionString =
+    process.env.DATABASE_URL ||
+    process.env.DIRECT_URL ||
+    'postgresql://postgres:postgres@localhost:5432/postgres';
+
+  const isLocal =
+    connectionString.includes('localhost') ||
+    connectionString.includes('127.0.0.1');
+
+  const pool = new Pool({
+    connectionString,
+    ssl: isLocal ? false : { rejectUnauthorized: false },
+  });
+
+  const adapter = new PrismaPg(pool);
+  _prisma = new PrismaClient({ adapter });
+
+  return _prisma;
+}
+
+// Global caching for development to prevent hot-reload connection leaks
+const globalWithPrisma = globalThis as unknown as {
+  prisma?: PrismaClient;
+};
+
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    if (process.env.NODE_ENV !== 'production' && globalWithPrisma.prisma) {
+      const client = globalWithPrisma.prisma;
+      const value = (client as unknown as Record<string | symbol, unknown>)[prop];
+      return typeof value === 'function' ? (value as Function).bind(client) : value;
     }
-    dbPath = tmpDbPath;
-  } catch (err) {
-    console.error('Error setting up /tmp/dev.db for Vercel:', err);
-  }
-}
 
-const adapter = new PrismaBetterSqlite3({ url: `file:${dbPath}` });
+    const client = getPrismaClient();
+    if (process.env.NODE_ENV !== 'production') {
+      globalWithPrisma.prisma = client;
+    }
 
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient({ adapter });
-} else {
-  const globalWithPrisma = global as typeof globalThis & {
-    prisma?: PrismaClient;
-  };
-  if (!globalWithPrisma.prisma) {
-    globalWithPrisma.prisma = new PrismaClient({ adapter });
-  }
-  prisma = globalWithPrisma.prisma;
-}
+    const value = (client as unknown as Record<string | symbol, unknown>)[prop];
+    return typeof value === 'function' ? (value as Function).bind(client) : value;
+  },
+});
 
 export default prisma;
-export { prisma };

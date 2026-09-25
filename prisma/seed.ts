@@ -1,9 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
+import 'dotenv/config';
+import { prisma } from '../lib/prisma';
 import * as bcrypt from 'bcryptjs';
-
-const adapter = new PrismaBetterSqlite3({ url: 'file:./prisma/dev.db' });
-const prisma = new PrismaClient({ adapter });
 
 // Helper functions for dates (relative to today, since seed data is mock-relative)
 function monthsAgo(n: number): string {
