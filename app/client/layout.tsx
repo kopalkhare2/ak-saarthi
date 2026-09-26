@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { AppProvider, useApp } from '@/contexts/app-context';
 import LoadingScreen from '@/components/ui/loading-screen';
 import { getFullName, getInitials } from '@/lib/utils';
@@ -20,10 +22,26 @@ const navItems = [
 function ClientPortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  // proxy.ts already redirects unauthenticated/wrong-role requests to /login
-  // before this ever renders; `clients[0]` is the signed-in client's own record.
+  const { data: session, status } = useSession();
   const { clients, isLoading } = useApp();
   const activeClient = clients[0];
+
+  // Sync NextAuth Google session into localStorage so API guards pass
+  useEffect(() => {
+    if (status === 'loading') return;
+    if (session?.user) {
+      const role = (session.user as any).role as string | undefined;
+      const clientId = (session.user as any).clientId as string | undefined;
+      if (role === 'client') {
+        localStorage.setItem('ak_logged_in_role', 'client');
+        if (clientId) localStorage.setItem('ak_logged_in_client_id', clientId);
+      } else if (role === 'advisor') {
+        // Google user is an advisor — redirect to advisor portal
+        router.push('/advisor/dashboard');
+      }
+    }
+  }, [session, status, router]);
+
 
   const clientName = activeClient ? getFullName(activeClient.firstName, activeClient.lastName) : 'Client';
   const initials = activeClient ? getInitials(activeClient.firstName, activeClient.lastName) : 'C';

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import Sidebar from '@/components/ui/sidebar';
 import Topbar from '@/components/ui/topbar';
 import { AppProvider } from '@/contexts/app-context';
@@ -13,16 +14,31 @@ export default function AdvisorLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const role = localStorage.getItem('ak_logged_in_role');
-    if (role !== 'advisor') {
-      router.push('/login');
-    } else {
+    if (status === 'loading') return; // still fetching NextAuth session
+
+    const localRole = localStorage.getItem('ak_logged_in_role');
+
+    // Allow if NextAuth Google session has advisor role
+    const nextAuthOk = session?.user && (session.user as any).role === 'advisor';
+    // Allow if legacy email/password login set the localStorage key
+    const legacyOk = localRole === 'advisor';
+
+    if (nextAuthOk || legacyOk) {
+      // Keep localStorage in sync so other components that read it work
+      if (nextAuthOk && !legacyOk) {
+        localStorage.setItem('ak_logged_in_role', 'advisor');
+      }
       setLoading(false);
+    } else if (session?.user && (session.user as any).role === 'client') {
+      router.push('/client/dashboard');
+    } else {
+      router.push('/login');
     }
-  }, [router]);
+  }, [router, session, status]);
 
   if (loading) {
     return (
@@ -49,4 +65,3 @@ export default function AdvisorLayout({
     </AppProvider>
   );
 }
-
