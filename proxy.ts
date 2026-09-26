@@ -57,7 +57,17 @@ function getJwtSecret(): string {
 
 export async function proxy(request: NextRequest) {
   const token = request.cookies.get('ak_token')?.value;
+  const nextAuthToken =
+    request.cookies.get('__Secure-authjs.session-token')?.value ||
+    request.cookies.get('authjs.session-token')?.value ||
+    request.cookies.get('__Secure-next-auth.session-token')?.value ||
+    request.cookies.get('next-auth.session-token')?.value;
   const { pathname } = request.nextUrl;
+
+  // If user has a NextAuth Google session, allow through to page & layout guards
+  if (nextAuthToken) {
+    return NextResponse.next();
+  }
 
   if (!token) {
     return NextResponse.redirect(new URL('/login', request.url));
