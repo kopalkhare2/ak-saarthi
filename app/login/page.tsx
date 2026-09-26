@@ -57,6 +57,12 @@ function LoginForm() {
       const csrfRes = await fetch('/api/auth/csrf');
       const { csrfToken } = await csrfRes.json();
 
+      // Remember the portal mode chosen by the user
+      localStorage.setItem('ak_logged_in_role', role);
+      if (role === 'client' && !localStorage.getItem('ak_logged_in_client_id')) {
+        localStorage.setItem('ak_logged_in_client_id', 'client-001');
+      }
+
       // 2. Request Google OAuth sign-in URL from Auth.js
       const targetCallback = role === 'advisor' ? '/advisor/dashboard' : '/client/dashboard';
       const res = await fetch('/api/auth/signin/google', {

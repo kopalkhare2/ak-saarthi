@@ -26,19 +26,22 @@ function ClientPortalShell({ children }: { children: React.ReactNode }) {
   const { clients, isLoading } = useApp();
   const activeClient = clients[0];
 
-  // Sync NextAuth Google session into localStorage so API guards pass
+  // Sync NextAuth Google session or local storage for client portal
   useEffect(() => {
     if (status === 'loading') return;
+
+    const localRole = localStorage.getItem('ak_logged_in_role');
+
     if (session?.user) {
-      const role = (session.user as any).role as string | undefined;
       const clientId = (session.user as any).clientId as string | undefined;
-      if (role === 'client') {
-        localStorage.setItem('ak_logged_in_role', 'client');
-        if (clientId) localStorage.setItem('ak_logged_in_client_id', clientId);
-      } else if (role === 'advisor') {
-        // Google user is an advisor — redirect to advisor portal
-        router.push('/advisor/dashboard');
+      localStorage.setItem('ak_logged_in_role', 'client');
+      if (clientId) {
+        localStorage.setItem('ak_logged_in_client_id', clientId);
+      } else if (!localStorage.getItem('ak_logged_in_client_id')) {
+        localStorage.setItem('ak_logged_in_client_id', 'client-001');
       }
+    } else if (localRole !== 'client') {
+      router.push('/login');
     }
   }, [session, status, router]);
 
