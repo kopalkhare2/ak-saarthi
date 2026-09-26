@@ -5,13 +5,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useApp } from '@/contexts/app-context';
 import { getFullName, daysFromNow } from '@/lib/utils';
-import { Search, Bell, Plus, User, LogOut, ChevronDown, Calendar, ShieldAlert } from 'lucide-react';
+import { Search, Bell, Plus, User, LogOut, ChevronDown, Calendar, ShieldAlert, Shield } from 'lucide-react';
 
 interface NotificationItem {
   id: string;
   title: string;
   desc: string;
-  type: 'due' | 'lapsed' | 'appt';
+  type: 'due' | 'lapsed' | 'appt' | 'admin';
   link: string;
 }
 
@@ -27,6 +27,9 @@ export default function Topbar() {
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [identity, setIdentity] = useState<AdvisorIdentity>({ name: 'Advisor', email: '' });
+  const [pendingRequestsCount, setPendingRequestsCount] = useState<number>(0);
+
+  const isAdminUser = identity.email.toLowerCase().trim() === 'kopalkhare2@gmail.com';
 
   useEffect(() => {
     let active = true;
@@ -40,10 +43,25 @@ export default function Topbar() {
         const me = meRes.ok ? await meRes.json() : null;
         const profile = profileRes.ok ? await profileRes.json() : null;
         if (!active) return;
+        const userEmail = me?.user?.email || profile?.email || '';
         setIdentity({
           name: profile?.name || 'Advisor',
-          email: me?.user?.email || profile?.email || '',
+          email: userEmail,
         });
+
+        // Check if admin to fetch pending access requests
+        if (userEmail.toLowerCase().trim() === 'kopalkhare2@gmail.com' || me?.user?.role === 'admin') {
+          try {
+            const reqRes = await fetch('/api/advisor/requests');
+            if (reqRes.ok) {
+              const reqs = await reqRes.json();
+              if (Array.isArray(reqs)) {
+                const pending = reqs.filter((r) => r.status === 'pending').length;
+                if (active) setPendingRequestsCount(pending);
+              }
+            }
+          } catch {}
+        }
       } catch {
         // Keep the fallback identity — this is cosmetic, not a security boundary.
       }
@@ -57,6 +75,17 @@ export default function Topbar() {
   // Derived from existing app-context data — no separate fetch/effect needed.
   const notifications: NotificationItem[] = useMemo(() => {
     const list: NotificationItem[] = [];
+
+    // 0. Pending advisor requests (if Admin)
+    if (isAdminUser && pendingRequestsCount > 0) {
+      list.push({
+        id: 'notif-admin-requests',
+        title: 'Advisor Access Request',
+        desc: `${pendingRequestsCount} new financial advisor request(s) awaiting your review and approval.`,
+        type: 'admin',
+        link: '/admin/requests',
+      });
+    }
 
     // 1. Policies due in next 30 days
     policies.forEach((p) => {
@@ -100,7 +129,7 @@ export default function Topbar() {
     });
 
     return list;
-  }, [policies, clients, appointments]);
+  }, [policies, clients, appointments, isAdminUser, pendingRequestsCount]);
 
   const toggleNotifications = () => {
     setShowNotifications(!showNotifications);
@@ -138,6 +167,23 @@ export default function Topbar() {
 
       {/* Actions */}
       <div className="flex items-center gap-2 ml-4">
+        {/* Admin Console Switcher for Administrator */}
+        {isAdminUser && (
+          <Link
+            href="/admin/dashboard"
+            className="btn btn-secondary text-xs py-2 px-3 flex items-center gap-1.5 border-amber-500/30 text-amber-400 hover:border-amber-400 hover:bg-amber-500/10"
+            title="Switch to Platform Admin Console"
+          >
+            <Shield size={14} className="text-amber-400" />
+            <span className="hidden md:inline">Admin Console</span>
+            {pendingRequestsCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 font-bold text-[9px] flex items-center justify-center">
+                {pendingRequestsCount}
+              </span>
+            )}
+          </Link>
+        )}
+
         {/* Quick Add */}
         <div className="relative">
           <button
@@ -197,11 +243,13 @@ export default function Topbar() {
                       className="flex items-start gap-2.5 p-2 rounded hover:bg-slate-800/50 transition-colors"
                     >
                       <div className={`p-1.5 rounded mt-0.5 ${
+                        n.type === 'admin' ? 'bg-amber-500/10 text-amber-400' :
                         n.type === 'lapsed' ? 'bg-red-500/10 text-red-400' :
                         n.type === 'appt' ? 'bg-blue-500/10 text-blue-400' :
                         'bg-yellow-500/10 text-yellow-400'
                       }`}>
-                        {n.type === 'lapsed' ? <ShieldAlert size={14} /> :
+                        {n.type === 'admin' ? <Shield size={14} /> :
+                         n.type === 'lapsed' ? <ShieldAlert size={14} /> :
                          n.type === 'appt' ? <Calendar size={14} /> :
                          <Bell size={14} />}
                       </div>
@@ -234,6 +282,11 @@ export default function Topbar() {
                 <p className="text-sm font-semibold">{identity.name}</p>
                 <p className="text-xs text-slate-500">{identity.email}</p>
               </div>
+              {isAdminUser && (
+                <Link href="/admin/dashboard" className="sidebar-link text-sm py-2 text-amber-400 hover:text-amber-300" onClick={() => setShowProfile(false)}>
+                  <Shield size={16} /> Admin Console
+                </Link>
+              )}
               <Link href="/advisor/settings" className="sidebar-link text-sm py-2" onClick={() => setShowProfile(false)}>
                 <User size={16} /> Profile & Settings
               </Link>

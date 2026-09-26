@@ -89,6 +89,15 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
+  // Admin routes protection
+  if (pathname.startsWith('/admin')) {
+    const email = typeof decoded.email === 'string' ? decoded.email.toLowerCase().trim() : '';
+    const isAdmin = email === 'kopalkhare2@gmail.com' || decoded.role === 'admin';
+    if (!isAdmin) {
+      return NextResponse.redirect(new URL('/advisor/dashboard', request.url));
+    }
+  }
+
   // Advisor routes protection
   if (pathname.startsWith('/advisor') && decoded.role !== 'advisor') {
     return NextResponse.redirect(new URL('/login', request.url));
@@ -104,6 +113,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/admin/:path*',
     '/advisor/:path*',
     '/client/:path*',
   ],

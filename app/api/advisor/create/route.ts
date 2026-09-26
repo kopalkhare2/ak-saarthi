@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import * as bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { requireSession } from '@/lib/auth';
+import { sendAdvisorApprovalEmail } from '@/lib/email';
 
 // Only an already-authenticated advisor may create another advisor account.
 export async function POST(request: Request) {
@@ -47,15 +48,33 @@ export async function POST(request: Request) {
       });
     }
 
-    await prisma.advisorAccessRequest.updateMany({
-      where: { email },
-      data: { status: 'approved' },
-    });
+    // Send approval & credentials email to the new advisor
+    let emailStatus = { sent: false, provider: 'none' };
+    let welcomeTemplate = null;
+
+    try {
+      // Find applicant name if exists
+      const accessReq = await prisma.advisorAccessRequest.findFirst({ where: { email } });
+      const applicantName = accessReq?.name || email.split('@')[0];
+
+      const emailResult = await sendAdvisorApprovalEmail({
+        to: email,
+        name: applicantName,
+        temporaryPassword: password,
+      });
+
+      emailStatus = { sent: emailResult.sent, provider: emailResult.provider || 'none' };
+      welcomeTemplate = emailResult.template;
+    } catch (emailErr) {
+      console.warn('Failed to send approval email:', emailErr);
+    }
 
     return NextResponse.json({
       success: true,
       message: `Advisor account successfully created for ${email}`,
       user: { email, role: 'advisor' },
+      emailStatus,
+      welcomeTemplate,
     });
   } catch (error) {
     console.error('Failed to create advisor:', error);
