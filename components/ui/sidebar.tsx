@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -19,12 +20,15 @@ import {
   ChevronRight,
   Sparkles,
   Calculator,
+  ShieldAlert,
+  UserCheck,
 } from 'lucide-react';
 
 interface NavItem {
   href: string;
   label: string;
   icon: React.ReactNode;
+  badge?: number | null;
 }
 
 const mainNav: NavItem[] = [
@@ -78,11 +82,18 @@ function NavSection({
             <Link
               key={item.href}
               href={item.href}
-              className={`sidebar-link ${isActive ? 'active' : ''}`}
+              className={`sidebar-link ${isActive ? 'active' : ''} flex items-center justify-between`}
               title={collapsed ? item.label : undefined}
             >
-              <span className="sidebar-icon shrink-0">{item.icon}</span>
-              {!collapsed && <span>{item.label}</span>}
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="sidebar-icon shrink-0">{item.icon}</span>
+                {!collapsed && <span className="truncate">{item.label}</span>}
+              </div>
+              {!collapsed && item.badge && item.badge > 0 && (
+                <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500 text-slate-950">
+                  {item.badge}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -101,6 +112,48 @@ export default function Sidebar({
   onToggleCollapsed = () => {},
 }: SidebarProps) {
   const pathname = usePathname();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok) return;
+        const data = await res.json();
+        const email = (data?.user?.email || '').toLowerCase().trim();
+        if (email === 'kopalkhare2@gmail.com' || data?.user?.role === 'admin') {
+          if (!active) return;
+          setIsAdmin(true);
+
+          try {
+            const reqRes = await fetch('/api/advisor/requests');
+            if (reqRes.ok) {
+              const reqs = await reqRes.json();
+              if (Array.isArray(reqs) && active) {
+                setPendingRequests(reqs.filter((r) => r.status === 'pending').length);
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const adminNav: NavItem[] = [
+    { href: '/admin/dashboard', label: 'Admin Dashboard', icon: <ShieldAlert size={20} className="text-amber-400" /> },
+    {
+      href: '/admin/requests',
+      label: 'Advisor Requests',
+      icon: <UserCheck size={20} className="text-amber-400" />,
+      badge: pendingRequests > 0 ? pendingRequests : null,
+    },
+    { href: '/admin/advisors', label: 'Registered Advisors', icon: <Users size={20} className="text-amber-400" /> },
+  ];
 
   return (
     <aside
@@ -123,6 +176,14 @@ export default function Sidebar({
 
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto py-4 px-2">
+        {isAdmin && (
+          <NavSection
+            title="Administration"
+            items={adminNav}
+            collapsed={collapsed}
+            pathname={pathname}
+          />
+        )}
         <NavSection title="Main" items={mainNav} collapsed={collapsed} pathname={pathname} />
         <NavSection title="Business" items={businessNav} collapsed={collapsed} pathname={pathname} />
         <NavSection title="Tools" items={toolsNav} collapsed={collapsed} pathname={pathname} />

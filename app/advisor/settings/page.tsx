@@ -1,7 +1,26 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { User, Bell, Database, Save, Download, CheckCircle2, XCircle, Clock, ShieldCheck, Mail, Phone } from 'lucide-react';
+import Link from 'next/link';
+import {
+  User,
+  Bell,
+  Database,
+  Save,
+  Download,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  ShieldCheck,
+  Mail,
+  Phone,
+  ShieldAlert,
+  ExternalLink,
+  Key,
+  Copy,
+  Check,
+} from 'lucide-react';
+import Modal from '@/components/ui/modal';
 
 interface AdvisorProfile {
   name: string;
@@ -39,6 +58,18 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState<boolean>(true);
+
+  // Approval modal states
+  const [approvingReq, setApprovingReq] = useState<AccessRequest | null>(null);
+  const [tempPassword, setTempPassword] = useState('password123');
+  const [isProcessingApproval, setIsProcessingApproval] = useState(false);
+  const [approvalResult, setApprovalResult] = useState<{
+    email: string;
+    password: string;
+    emailSent: boolean;
+    provider?: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const fetchAccessRequests = async () => {
     try {
@@ -117,18 +148,25 @@ export default function SettingsPage() {
     link.click();
   };
 
-  const handleApproveRequest = async (reqId: string, reqEmail: string) => {
-    const targetEmail = prompt('Confirm Email for new Advisor account:', reqEmail || '');
-    if (!targetEmail) return;
+  const handleOpenApproveModal = (req: AccessRequest) => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$';
+    let rand = '';
+    for (let i = 0; i < 8; i++) {
+      rand += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setTempPassword(`Saarthi@${rand}`);
+    setApprovingReq(req);
+  };
 
-    const tempPassword = prompt('Set temporary password for new Advisor account:', 'password123');
-    if (!tempPassword) return;
+  const handleConfirmApproval = async () => {
+    if (!approvingReq) return;
+    setIsProcessingApproval(true);
 
     try {
       const res = await fetch('/api/advisor/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: targetEmail, password: tempPassword }),
+        body: JSON.stringify({ email: approvingReq.email, password: tempPassword }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -140,13 +178,21 @@ export default function SettingsPage() {
       await fetch('/api/advisor/requests', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: reqId, status: 'approved' }),
+        body: JSON.stringify({ id: approvingReq.id, status: 'approved' }),
       });
 
       fetchAccessRequests();
-      alert(`✅ Advisor account created for ${targetEmail}!\nTemporary Password: ${tempPassword}`);
+      setApprovalResult({
+        email: approvingReq.email,
+        password: tempPassword,
+        emailSent: !!data.emailStatus?.sent,
+        provider: data.emailStatus?.provider,
+      });
+      setApprovingReq(null);
     } catch {
       alert('Failed to process approval.');
+    } finally {
+      setIsProcessingApproval(false);
     }
   };
 
@@ -221,6 +267,27 @@ export default function SettingsPage() {
           You are the system administrator. Public sign-ups create Client accounts only. All Advisor access requests require your approval here.
         </p>
 
+        {/* Banner pointing to dedicated Admin Console */}
+        <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-amber-500/20 text-amber-400 shrink-0">
+              <ShieldAlert size={22} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">Dedicated Platform Host Admin Console</p>
+              <p className="text-xs text-slate-400">
+                Manage advisor access requests, multi-tenant advisors, passwords, and platform metrics with instant email delivery.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/admin/requests"
+            className="btn btn-primary text-xs py-2 px-3.5 flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 shadow-lg shadow-amber-500/10"
+          >
+            Open Admin Console <ExternalLink size={13} />
+          </Link>
+        </div>
+
         {/* Pending Requests List */}
         <div className="mb-6 space-y-3">
           <div className="flex items-center justify-between">
@@ -254,7 +321,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button
-                      onClick={() => handleApproveRequest(req.id, req.email)}
+                      onClick={() => handleOpenApproveModal(req)}
                       className="btn btn-primary text-xs py-1.5 px-3"
                     >
                       <CheckCircle2 size={14} /> Approve & Grant
@@ -435,6 +502,155 @@ export default function SettingsPage() {
           Backup includes all clients, policies, investments, commissions, appointments, tasks, and document metadata.
         </p>
       </div>
+
+      {/* Approval Modal */}
+      {approvingReq && (
+        <Modal
+          isOpen={true}
+          onClose={() => setApprovingReq(null)}
+          title={`Approve Advisor Request - ${approvingReq.name}`}
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-slate-300">
+              Approving will create an active financial advisor account for <strong>{approvingReq.email}</strong>.
+            </p>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-400 mb-1 block">Temporary Password</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={tempPassword}
+                  onChange={(e) => setTempPassword(e.target.value)}
+                  className="input font-mono text-xs w-full bg-slate-900 border-slate-700"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$';
+                    let rand = '';
+                    for (let i = 0; i < 8; i++) {
+                      rand += chars.charAt(Math.floor(Math.random() * chars.length));
+                    }
+                    setTempPassword(`Saarthi@${rand}`);
+                  }}
+                  className="btn btn-secondary text-xs px-3 whitespace-nowrap"
+                  title="Generate Random Password"
+                >
+                  Regenerate
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                The advisor can change this temporary password at any time in their profile.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setApprovingReq(null)}
+                className="btn btn-secondary text-xs"
+                disabled={isProcessingApproval}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmApproval}
+                className="btn btn-primary text-xs flex items-center gap-1.5"
+                disabled={isProcessingApproval || tempPassword.length < 6}
+              >
+                <CheckCircle2 size={14} />
+                {isProcessingApproval ? 'Creating Account...' : 'Approve & Provision'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Approval Credentials & Delivery Modal */}
+      {approvalResult && (
+        <Modal
+          isOpen={true}
+          onClose={() => setApprovalResult(null)}
+          title="Advisor Account Approved & Created"
+        >
+          <div className="space-y-4">
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-xs flex items-start gap-2">
+              <CheckCircle2 size={16} className="shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Account created successfully for {approvalResult.email}!</p>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  The advisor can now sign in at <strong className="text-white">https://ak-saarthi.vercel.app/login</strong>.
+                </p>
+              </div>
+            </div>
+
+            {/* Email delivery status notice */}
+            {approvalResult.emailSent ? (
+              <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-lg text-[11px] text-blue-300 flex items-center gap-2">
+                <Mail size={14} className="shrink-0" />
+                <span>An automated onboarding email was dispatched to the advisor inbox.</span>
+              </div>
+            ) : (
+              <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[11px] text-amber-300">
+                <p className="font-semibold flex items-center gap-1.5 mb-0.5">
+                  <ShieldAlert size={13} /> Direct Email Not Sent (Provider Not Configured)
+                </p>
+                <p className="text-slate-400 text-[10.5px]">
+                  No email provider (Resend API key or Gmail App Password) is set in your environment variables. Use the buttons below to copy the credentials or open a pre-filled email draft.
+                </p>
+              </div>
+            )}
+
+            <div className="p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-1.5 text-xs font-mono">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Portal:</span>
+                <span className="text-white">https://ak-saarthi.vercel.app/login</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Email:</span>
+                <span className="text-white font-semibold">{approvalResult.email}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Password:</span>
+                <span className="text-amber-400 font-bold">{approvalResult.password}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const text = `Welcome to AK Saarthi AI!\n\nYour advisor account has been approved.\n\nLogin URL: https://ak-saarthi.vercel.app/login\nEmail: ${approvalResult.email}\nTemporary Password: ${approvalResult.password}\n\nPlease change your password upon your first sign in.`;
+                  navigator.clipboard.writeText(text);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2500);
+                }}
+                className="btn btn-secondary text-xs flex-1 flex items-center justify-center gap-1.5"
+              >
+                {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                {copied ? 'Copied to Clipboard!' : 'Copy Credentials'}
+              </button>
+
+              <a
+                href={`mailto:${approvalResult.email}?subject=Your%20AK%20Saarthi%20Advisor%20Account%20Credentials&body=Welcome%20to%20AK%20Saarthi%20AI!%0A%0AYour%20advisor%20account%20has%20been%20approved.%0A%0ALogin%20URL:%20https://ak-saarthi.vercel.app/login%0AEmail:%20${approvalResult.email}%0ATemporary%20Password:%20${approvalResult.password}%0A%0APlease%20change%20your%20password%20upon%20first%20sign%20in.`}
+                className="btn btn-primary text-xs flex items-center justify-center gap-1.5"
+              >
+                <Mail size={14} /> Send Email
+              </a>
+            </div>
+
+            <div className="pt-2 text-right">
+              <button
+                onClick={() => setApprovalResult(null)}
+                className="btn btn-secondary text-xs"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
