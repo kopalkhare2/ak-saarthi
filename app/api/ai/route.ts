@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { prisma } from '@/lib/prisma';
-import { requireSession } from '@/lib/auth';
+import { requireSession, isAdmin } from '@/lib/auth';
 import { formatCurrency, getFullName } from '@/lib/utils';
 import type { Client, Policy, Investment } from '@prisma/client';
 
@@ -77,6 +77,7 @@ export async function POST(request: Request) {
   try {
     const auth = await requireSession(['advisor']);
     if ('response' in auth) return auth.response;
+    const { session } = auth;
 
     const { query } = await request.json();
 
@@ -84,11 +85,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 });
     }
 
-    // Fetch database snapshot for context
-    const [clients, policies, investments] = await Promise.all([
-      prisma.client.findMany({ include: { family: true } }),
-      prisma.policy.findMany(),
-      prisma.investment.findMany(),
+    const isAdminUser = isAdmin(session.email);
+
+    const clientWhere: any = { isDeleted: false };
+    if (!isAdminUser) {
+      clientWhere.advisorId = session.userId;
+    }
+
+    // Fetch database snapshot for context scoped to the advisor
+    const clients = await prisma.client.findMany({
+      where: clientWhere,
+      include: { family: true },
+    });
+
+    const clientIds = clients.map((c) => c.id);
+
+    const [policies, investments] = await Promise.all([
+      prisma.policy.findMany({
+        where: isAdminUser ? undefined : { clientId: { in: clientIds } },
+      }),
+      prisma.investment.findMany({
+        where: isAdminUser ? undefined : { clientId: { in: clientIds } },
+      }),
     ]);
 
     if (!GEMINI_API_KEY) {
@@ -97,14 +115,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ response: mockResult });
     }
 
-    // Format context for Gemini
+    // Format context for Gemini (excluding sensitive contact info: phone and email)
     const databaseContext = {
       clients: clients.map((c) => ({
         id: c.id,
         name: `${c.firstName} ${c.lastName}`,
         dob: c.dob,
-        phone: c.phone,
-        email: c.email,
         city: c.city,
         occupation: c.occupation,
         annualIncome: c.annualIncome,
@@ -139,10 +155,11 @@ export async function POST(request: Request) {
       })),
     };
 
-    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    try {
+      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-    const systemPrompt = `You are AK Saarthi AI, a premium AI copilot for a financial advisor. 
+      const systemPrompt = `You are AK Saarthi AI, a premium AI copilot for a financial advisor. 
 You have direct read access to the advisor's database. Here is the database in JSON format:
 ${JSON.stringify(databaseContext, null, 2)}
 
@@ -154,24 +171,29 @@ Instructions:
 5. If the user asks you to draft a message (WhatsApp or Email), provide a professional copy-pasteable template pre-filled with the client's information.
 6. If the user asks about a client not in the database, politely say you couldn't find them.`;
 
-    const chat = model.startChat({
-      history: [
-        {
-          role: 'user',
-          parts: [{ text: 'Identify yourself and your capabilities.' }],
-        },
-        {
-          role: 'model',
-          parts: [{ text: 'I am AK Saarthi AI, your intelligent financial assistant. I can summarize client portfolios, analyze insurance gaps, identify upcoming policy renewals, draft communications, and suggest follow-ups based on your database.' }],
-        },
-      ],
-      systemInstruction: systemPrompt,
-    });
+      const chat = model.startChat({
+        history: [
+          {
+            role: 'user',
+            parts: [{ text: 'Identify yourself and your capabilities.' }],
+          },
+          {
+            role: 'model',
+            parts: [{ text: 'I am AK Saarthi AI, your intelligent financial assistant. I can summarize client portfolios, analyze insurance gaps, identify upcoming policy renewals, draft communications, and suggest follow-ups based on your database.' }],
+          },
+        ],
+        systemInstruction: systemPrompt,
+      });
 
-    const result = await chat.sendMessage(query);
-    const responseText = result.response.text();
+      const result = await chat.sendMessage(query);
+      const responseText = result.response.text();
 
-    return NextResponse.json({ response: responseText });
+      return NextResponse.json({ response: responseText });
+    } catch (aiErr) {
+      console.error('Gemini AI execution failed, falling back to mock response:', aiErr);
+      const mockResult = getMockResponse(query, { clients, policies, investments });
+      return NextResponse.json({ response: mockResult });
+    }
   } catch (error) {
     console.error('Gemini AI execution failed:', error);
     return NextResponse.json(

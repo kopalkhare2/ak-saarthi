@@ -48,9 +48,12 @@ async function verifyJwt(token: string, secret: string): Promise<Record<string, 
   }
 }
 
-function getJwtSecret(): string {
+function getJwtSecret(): string | null {
   const secret = process.env.JWT_SECRET;
   if (secret) return secret;
+  if (process.env.NODE_ENV === 'production') {
+    return null;
+  }
   // Matches lib/auth.ts's dev fallback so tokens signed there verify here too.
   return 'ak-saarthi-dev-only-secret-key-do-not-use-in-prod';
 }
@@ -73,7 +76,12 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  const decoded = await verifyJwt(token, getJwtSecret());
+  const jwtSecret = getJwtSecret();
+  if (!jwtSecret) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  const decoded = await verifyJwt(token, jwtSecret);
   if (!decoded) {
     // Invalid signature or malformed token — clear the cookie
     const response = NextResponse.redirect(new URL('/login', request.url));
@@ -92,7 +100,8 @@ export async function proxy(request: NextRequest) {
   // Admin routes protection
   if (pathname.startsWith('/admin')) {
     const email = typeof decoded.email === 'string' ? decoded.email.toLowerCase().trim() : '';
-    const isAdmin = email === 'kopalkhare2@gmail.com' || decoded.role === 'admin';
+    const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+    const isAdmin = Boolean((adminEmail && email === adminEmail) || decoded.role === 'admin');
     if (!isAdmin) {
       return NextResponse.redirect(new URL('/advisor/dashboard', request.url));
     }

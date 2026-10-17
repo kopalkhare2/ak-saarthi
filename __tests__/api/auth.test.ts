@@ -93,6 +93,21 @@ describe('POST /api/auth/login', () => {
     expect(data.error).toBe('Invalid email or password');
   });
 
+  it('should return 401 when password is wrong even if isGoogle is true', async () => {
+    await createTestUser({ email: 'advisor@test.com', password: 'correct-password' });
+
+    const req = createMockRequest('/api/auth/login', {
+      method: 'POST',
+      body: { email: 'advisor@test.com', password: 'wrong-password', isGoogle: true },
+    });
+
+    const res = await loginHandler(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(401);
+    expect(data.error).toBe('Invalid email or password');
+  });
+
   it('should return 200 with user data and set cookie on valid login', async () => {
     await createTestUser({ email: 'advisor@test.com', password: 'password123', role: 'advisor' });
 

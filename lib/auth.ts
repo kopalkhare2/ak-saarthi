@@ -135,5 +135,6 @@ export async function requireSession(
 }
 
 export function isAdmin(email: string): boolean {
-  return email.toLowerCase().trim() === 'kopalkhare2@gmail.com';
+  const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+  return Boolean(adminEmail && email.toLowerCase().trim() === adminEmail);
 }

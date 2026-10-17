@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import * as bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { getAuthSession, isAdmin, requireSession } from '@/lib/auth';
 
 export async function GET(request?: Request) {
@@ -87,11 +88,14 @@ export async function POST(request: Request) {
       },
     });
 
-    // Create linked Client User account with initial default password 'password'
+    let temporaryPassword: string | undefined;
+
+    // Create linked Client User account with a random temporary password
     if (newClient.email) {
       const existingUser = await prisma.user.findFirst({ where: { email: newClient.email.toLowerCase().trim() } });
       if (!existingUser) {
-        const hashedPassword = await bcrypt.hash('password', 10);
+        temporaryPassword = crypto.randomBytes(8).toString('hex');
+        const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
         await prisma.user.create({
           data: {
             email: newClient.email.toLowerCase().trim(),
@@ -106,7 +110,10 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json(newClient);
+    return NextResponse.json({
+      ...newClient,
+      ...(temporaryPassword ? { temporaryPassword } : {}),
+    });
   } catch (error: any) {
     console.error('Failed to create client:', error);
     if (error.code === 'P2002') {

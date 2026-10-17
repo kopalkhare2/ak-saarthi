@@ -4,6 +4,7 @@ const config = {
   testEnvironment: 'node',
   roots: ['<rootDir>/__tests__'],
   moduleNameMapper: {
+    '^@/auth$': '<rootDir>/__tests__/helpers/mock-auth.ts',
     '^@/(.*)$': '<rootDir>/$1',
   },
   transform: {

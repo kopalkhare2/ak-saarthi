@@ -96,7 +96,7 @@ function matchWhere(record: any, where: any, getRelations?: () => Record<string,
   return true;
 }
 
-function createModelStore<T extends Record<string, any>>(name: string, getRelations: () => Record<string, (r: any) => any> = () => ({})) {
+function createModelStore<T extends Record<string, any>>(name: string, getRelations: () => Record<string, (r?: any) => any> = () => ({})) {
   let records: T[] = [];
 
   function resolveIncludes(record: any, include: any) {

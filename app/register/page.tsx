@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Sparkles, Eye, EyeOff, AlertCircle, ArrowLeft, CheckCircle2, ShieldCheck, UserCheck } from 'lucide-react';
-import Modal from '@/components/ui/modal';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -13,12 +12,6 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1); // 1 = basic info, 2 = additional details
   const [role, setRole] = useState<'advisor' | 'client'>('advisor');
-
-  // Google Sign-up Modals
-  const [showGoogleModal, setShowGoogleModal] = useState(false);
-  const [googleEmail, setGoogleEmail] = useState('');
-  const [googleFirstName, setGoogleFirstName] = useState('');
-  const [googleLastName, setGoogleLastName] = useState('');
 
   // Form state
   const [form, setForm] = useState({
@@ -65,59 +58,40 @@ export default function RegisterPage() {
     setStep(2);
   };
 
-  const handleGoogleRegister = async (selectedEmail: string, fName: string, lName: string, selectedRole: 'advisor' | 'client') => {
+  const handleGoogleSignUp = async () => {
     setError('');
     setLoading(true);
-    setShowGoogleModal(false);
-
     try {
-      const res = await fetch('/api/auth/register', {
+      const csrfRes = await fetch('/api/auth/csrf');
+      const { csrfToken } = await csrfRes.json();
+
+      localStorage.setItem('ak_logged_in_role', role);
+      if (role === 'client' && !localStorage.getItem('ak_logged_in_client_id')) {
+        localStorage.setItem('ak_logged_in_client_id', 'client-001');
+      }
+
+      const targetCallback = role === 'advisor' ? '/advisor/dashboard' : '/client/dashboard';
+      const res = await fetch('/api/auth/signin/google', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstName: fName,
-          lastName: lName,
-          email: selectedEmail,
-          phone: '9876543210',
-          password: 'google-oauth-password-bypass',
-          role: selectedRole,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Auth-Return-Redirect': '1',
+        },
+        body: new URLSearchParams({
+          csrfToken,
+          callbackUrl: targetCallback,
         }),
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Registration failed');
-        setLoading(false);
-      } else {
-        // Automatically login the new Google user
-        const loginRes = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: selectedEmail,
-            role: selectedRole,
-            isGoogle: true,
-          }),
-        });
-
-        const loginData = await loginRes.json();
-        if (!loginRes.ok) {
-          setError(loginData.error || 'Failed to auto-login');
-          setLoading(false);
-        } else {
-          localStorage.setItem('ak_logged_in_role', loginData.role);
-          if (loginData.role === 'client' && loginData.clientId) {
-            localStorage.setItem('ak_logged_in_client_id', loginData.clientId);
-          }
-          if (loginData.role === 'advisor') {
-            router.push('/advisor/dashboard');
-          } else {
-            router.push('/client/dashboard');
-          }
-        }
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
       }
-    } catch (err) {
-      setError('Connection failed.');
+      throw new Error('Failed to retrieve Google OAuth authorization URL');
+    } catch (err: any) {
+      console.error('Google sign-up error:', err);
+      setError('Could not connect to Google sign-up. Please try again.');
       setLoading(false);
     }
   };
@@ -394,7 +368,8 @@ export default function RegisterPage() {
 
               <button
                 type="button"
-                onClick={() => setShowGoogleModal(true)}
+                onClick={handleGoogleSignUp}
+                disabled={loading}
                 className="w-full py-3 px-4 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800/80 hover:border-slate-700 transition-all flex items-center justify-center gap-3 text-sm font-medium text-slate-200 shadow-sm"
               >
                 <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
@@ -518,70 +493,6 @@ export default function RegisterPage() {
           </div>
         </div>
       </div>
-
-      {/* ─── Google Account Chooser Modal ─── */}
-      <Modal isOpen={showGoogleModal} onClose={() => setShowGoogleModal(false)} title="Sign up with Google">
-        <div className="space-y-4 py-2">
-          <p className="text-xs text-slate-400">
-            Create an account on <span className="text-yellow-400 font-semibold">AK Saarthi AI</span> using Google credentials
-          </p>
-
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label text-[10px]">First Name</label>
-                <input
-                  type="text"
-                  className="input text-xs"
-                  placeholder="e.g. Rahul"
-                  value={googleFirstName}
-                  onChange={(e) => setGoogleFirstName(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="label text-[10px]">Last Name</label>
-                <input
-                  type="text"
-                  className="input text-xs"
-                  placeholder="e.g. Sharma"
-                  value={googleLastName}
-                  onChange={(e) => setGoogleLastName(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="label text-[10px]">Google Email Address</label>
-              <input
-                type="email"
-                className="input text-xs"
-                placeholder="your.google.account@gmail.com"
-                value={googleEmail}
-                onChange={(e) => setGoogleEmail(e.target.value)}
-              />
-            </div>
-
-            <div className="pt-2 flex gap-2">
-              <button
-                type="button"
-                disabled={!googleEmail || !googleFirstName || !googleLastName}
-                onClick={() => handleGoogleRegister(googleEmail, googleFirstName, googleLastName, 'advisor')}
-                className="btn btn-secondary flex-1 py-2.5 text-xs"
-              >
-                Sign Up as Advisor
-              </button>
-              <button
-                type="button"
-                disabled={!googleEmail || !googleFirstName || !googleLastName}
-                onClick={() => handleGoogleRegister(googleEmail, googleFirstName, googleLastName, 'client')}
-                className="btn btn-primary flex-1 py-2.5 text-xs"
-              >
-                Sign Up as Client
-              </button>
-            </div>
-          </div>
-        </div>
-      </Modal>
     </main>
   );
 }
